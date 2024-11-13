@@ -17,51 +17,6 @@ function normalizeGeometry(geometry) {
     return geometry;
 }
 
-function generateColorScheme(countries, schemeName, baseColor) {
-    const colors = new Map();
-    
-    switch (schemeName) {
-        case 'rainbow':
-            // Current rainbow implementation
-            countries.forEach((country, i) => {
-                const scaleIndex = Math.floor(i / (countries.length / colorScales.length));
-                const scale = colorScales[scaleIndex];
-                const basePosition = (i % (countries.length / colorScales.length)) / (countries.length / colorScales.length);
-                const variation = (Math.random() - 0.5) * 0.1;
-                colors.set(country.properties.name, scale(basePosition + variation));
-            });
-            break;
-            
-        case 'greyscale':
-            countries.forEach((country, i) => {
-                const value = 0.2 + (0.6 * i / countries.length); // Range from 20% to 80% grey
-                const variation = (Math.random() - 0.5) * 0.1;
-                const adjustedValue = Math.max(0.1, Math.min(0.9, value + variation));
-                colors.set(country.properties.name, `rgb(${Math.floor(adjustedValue * 255)},${Math.floor(adjustedValue * 255)},${Math.floor(adjustedValue * 255)})`);
-            });
-            break;
-            
-        case 'monotone':
-            // Convert hex to RGB for manipulation
-            const hex = baseColor.replace('#', '');
-            const r = parseInt(hex.substring(0, 2), 16);
-            const g = parseInt(hex.substring(2, 4), 16);
-            const b = parseInt(hex.substring(4, 6), 16);
-            
-            countries.forEach((country, i) => {
-                const intensity = 0.3 + (0.7 * i / countries.length); // Range from 30% to 100%
-                const variation = (Math.random() - 0.5) * 0.1;
-                const adjustedIntensity = Math.max(0.2, Math.min(1, intensity + variation));
-                colors.set(country.properties.name, 
-                    `rgb(${Math.floor(r * adjustedIntensity)},${Math.floor(g * adjustedIntensity)},${Math.floor(b * adjustedIntensity)})`
-                );
-            });
-            break;
-    }
-    
-    return colors;
-}
-
 function drawShape(selection, shape, size) {
     switch (shape) {
         case 'circle':
@@ -144,16 +99,56 @@ function debugCountry(name) {
 }
 
 function generateCountryColors(countries) {
+    const scheme = document.getElementById("colorScheme").value;
+    const baseColor = document.getElementById("baseColor").value;
+    
+    console.log(`gencountrycolors, ${scheme}, ${baseColor}`)
+
+    return generateColorScheme(countries, scheme, baseColor);
+}
+
+function generateColorScheme(countries, schemeName, baseColor) {
     const colors = new Map();
-    countries.forEach((country, i) => {
-        // Use different color scales for different ranges
-        const scaleIndex = Math.floor(i / (countries.length / colorScales.length));
-        const scale = colorScales[scaleIndex];
-        // Add slight variations within each scale
-        const basePosition = (i % (countries.length / colorScales.length)) / (countries.length / colorScales.length);
-        const variation = (Math.random() - 0.5) * 0.1; // Add ±5% random variation
-        colors.set(country.properties.name, scale(basePosition + variation));
-    });
+    
+    switch (schemeName) {
+        case 'rainbow':
+            // Current rainbow implementation
+            countries.forEach((country, i) => {
+                const scaleIndex = Math.floor(i / (countries.length / colorScales.length));
+                const scale = colorScales[scaleIndex];
+                const basePosition = (i % (countries.length / colorScales.length)) / (countries.length / colorScales.length);
+                const variation = (Math.random() - 0.5) * 0.1;
+                colors.set(country.properties.name, scale(basePosition + variation));
+            });
+            break;
+            
+        case 'greyscale':
+            countries.forEach((country, i) => {
+                const value = 0.2 + (0.6 * i / countries.length); // Range from 20% to 80% grey
+                const variation = (Math.random() - 0.5) * 0.1;
+                const adjustedValue = Math.max(0.1, Math.min(0.9, value + variation));
+                colors.set(country.properties.name, `rgb(${Math.floor(adjustedValue * 255)},${Math.floor(adjustedValue * 255)},${Math.floor(adjustedValue * 255)})`);
+            });
+            break;
+            
+        case 'monotone':
+            // Convert hex to RGB for manipulation
+            const hex = baseColor.replace('#', '');
+            const r = parseInt(hex.substring(0, 2), 16);
+            const g = parseInt(hex.substring(2, 4), 16);
+            const b = parseInt(hex.substring(4, 6), 16);
+            
+            countries.forEach((country, i) => {
+                const intensity = 0.3 + (0.7 * i / countries.length); // Range from 30% to 100%
+                const variation = (Math.random() - 0.5) * 0.1;
+                const adjustedIntensity = Math.max(0.2, Math.min(1, intensity + variation));
+                colors.set(country.properties.name, 
+                    `rgb(${Math.floor(r * adjustedIntensity)},${Math.floor(g * adjustedIntensity)},${Math.floor(b * adjustedIntensity)})`
+                );
+            });
+            break;
+    }
+    
     return colors;
 }
 
@@ -476,6 +471,8 @@ function updateDebugInfo() {
 }
 
 function updateMap() {
+    countryColors = generateCountryColors(world.features);
+
     debugInfo = { totalChecks: 0, circleChecks: 0, fullChecks: 0, gridChecks: 0 };
     
     const { width, height } = updateDimensions();
@@ -686,7 +683,6 @@ Promise.all([
     initializeSpatialGrid();
     
     // Generate enhanced colors
-    countryColors = generateCountryColors(world.features);
     
     console.timeEnd('preprocessing');
     
@@ -694,6 +690,11 @@ Promise.all([
 
     document.getElementById("updateButton").addEventListener("click", updateMap);
     document.getElementById("showDebug").addEventListener("change", updateDebugInfo);
+
+    document.getElementById("colorScheme").addEventListener("change", function() {
+        const isMonotone = this.value === "monotone";
+        document.getElementById("monotoneControls").style.display = isMonotone ? "flex" : "none";
+    });
     
     window.addEventListener('resize', () => {
         updateMap();

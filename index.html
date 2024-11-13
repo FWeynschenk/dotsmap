@@ -26,8 +26,14 @@
             align-items: center;
             gap: 8px;
         }
-        select, input[type="number"] {
+        select, input[type="number"], input[type="color"] {
             padding: 4px 8px;
+        }
+        .color-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: opacity 0.3s;
         }
         button {
             padding: 5px 15px;
@@ -55,6 +61,7 @@
             <div class="control-group">
                 <label for="projection">Projection:</label>
                 <select id="projection">
+                    <option value="geoEquirectangular">Equirectangular</option>
                     <option value="geoEqualEarth">Equal Earth</option>
                     <option value="geoMercator">Mercator</option>
                     <option value="geoNaturalEarth1">Natural Earth</option>
@@ -66,42 +73,54 @@
                     <option value="geoAlbers">Albers</option>
                     <option value="geoConicEqualArea">Conic Equal Area</option>
                     <option value="geoConicEquidistant">Conic Equidistant</option>
-                    <option value="geoEquirectangular">Equirectangular</option>
                     <option value="geoTransverseMercator">Transverse Mercator</option>
                 </select>
             </div>
             <div class="control-group">
+                <label for="colorScheme">Color Scheme:</label>
+                <select id="colorScheme">
+                  <option value="rainbow">Rainbow</option>
+                  <option value="greyscale">Greyscale</option>
+                  <option value="monotone">Monotone</option>
+                </select>
+              </div>
+              <div class="control-group color-control" id="monotoneControls" style="display: none;">
+                <label for="baseColor">Base Color:</label>
+                <input type="color" id="baseColor" value="#4444ff">
+              </div>
+            
+            <div class="control-group">
                 <label for="spacing">Spacing:</label>
-                <input type="number" id="spacing" value="20" min="3" max="50">
+                <input type="number" id="spacing" value="10" min="3" max="50">
             </div>
             <div class="control-group">
                 <label for="dotSize">Dot Size:</label>
-                <input type="number" id="dotSize" value="2" min="1" max="10">
+                <input type="number" id="dotSize" value="3" min="1" max="10">
             </div>
             <div class="toggle-group">
-                <label>
-                    <input type="checkbox" id="showCountries" checked>
-                    Countries
-                </label>
-                <label>
-                    <input type="checkbox" id="showOutline" checked>
-                    Outline
-                </label>
-                <label>
-                    <input type="checkbox" id="showOcean" checked>
-                    Ocean
-                </label>
                 <label>
                     <input type="checkbox" id="showDots" checked>
                     Dots
                 </label>
                 <label>
-                    <input type="checkbox" id="showGraticules" checked>
-                    Grid Lines
+                    <input type="checkbox" id="showOceanDots">
+                    Ocean Dots
                 </label>
                 <label>
-                    <input type="checkbox" id="showOceanDots" checked>
-                    Ocean Dots
+                    <input type="checkbox" id="showCountries">
+                    Land
+                </label>
+                <label>
+                    <input type="checkbox" id="showOcean">
+                    Ocean
+                </label>
+                <label>
+                    <input type="checkbox" id="showOutline" checked>
+                    Projection Outline
+                </label>
+                <label>
+                    <input type="checkbox" id="showGraticules">
+                    Grid Lines
                 </label>
                 <label>
                     <input type="checkbox" id="enableHover" checked>
