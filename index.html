@@ -62,6 +62,9 @@
                 <label for="projection">Projection:</label>
                 <select id="projection">
                     <option value="geoEquirectangular">Equirectangular</option>
+                    <option value="geoInterruptedBoggs">geoInterruptedBoggs</option>
+                    <option value="geoInterruptedSinusoidal">geoInterruptedSinusoidal</option>
+                    <option value="geoBerghaus">geoBerghaus</option>
                     <option value="geoEqualEarth">Equal Earth</option>
                     <option value="geoMercator">Mercator</option>
                     <option value="geoNaturalEarth1">Natural Earth</option>
@@ -137,9 +140,10 @@
     </div>
     <div id="debug" style="display: none"></div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
-    
+    <script src="https://cdn.jsdelivr.net/npm/d3-geo-projection@4"></script>
+
     <script src="index.js"></script>
 </body>
 </html>

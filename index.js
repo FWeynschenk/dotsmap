@@ -679,8 +679,6 @@ Promise.all([
     // Initialize spatial grid
     initializeSpatialGrid();
     
-    // Generate enhanced colors
-    
     console.timeEnd('preprocessing');
     
     updateMap();
