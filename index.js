@@ -138,12 +138,9 @@ function generateColorScheme(countries, schemeName, baseColor) {
             const g = parseInt(hex.substring(2, 4), 16);
             const b = parseInt(hex.substring(4, 6), 16);
             
-            countries.forEach((country, i) => {
-                const intensity = 0.3 + (0.7 * i / countries.length); // Range from 30% to 100%
-                const variation = (Math.random() - 0.5) * 0.1;
-                const adjustedIntensity = Math.max(0.2, Math.min(1, intensity + variation));
+            countries.forEach((country) => {
                 colors.set(country.properties.name, 
-                    `rgb(${Math.floor(r * adjustedIntensity)},${Math.floor(g * adjustedIntensity)},${Math.floor(b * adjustedIntensity)})`
+                    `rgb(${Math.floor(r)},${Math.floor(g)},${Math.floor(b)})`
                 );
             });
             break;
