@@ -37,6 +37,16 @@
             gap: 16px;
             flex-wrap: wrap;
         }
+        #debug {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-family: monospace;
+        }
     </style>
 </head>
 <body>
@@ -62,7 +72,7 @@
             </div>
             <div class="control-group">
                 <label for="spacing">Spacing:</label>
-                <input type="number" id="spacing" value="20" min="5" max="50">
+                <input type="number" id="spacing" value="20" min="3" max="50">
             </div>
             <div class="control-group">
                 <label for="dotSize">Dot Size:</label>
@@ -89,215 +99,28 @@
                     <input type="checkbox" id="showGraticules" checked>
                     Grid Lines
                 </label>
+                <label>
+                    <input type="checkbox" id="showOceanDots" checked>
+                    Ocean Dots
+                </label>
+                <label>
+                    <input type="checkbox" id="enableHover" checked>
+                    Hover Info
+                </label>
+                <label>
+                    <input type="checkbox" id="showDebug">
+                    Debug Info
+                </label>
             </div>
             <button id="updateButton">Update Map</button>
         </div>
         <svg id="map"></svg>
     </div>
+    <div id="debug" style="display: none"></div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
     
-    <script>
-        function updateDimensions() {
-            const container = document.querySelector('.container');
-            const width = container.clientWidth;
-            const height = width * 0.6;
-            return { width, height };
-        }
-
-        let world;
-        let currentProjection;
-        let path;
-        let countryColors = {};
-        const graticule = d3.geoGraticule();
-
-        const colorScale = d3.scaleSequential(d3.interpolateRainbow);
-
-        function createDotsGrid(spacing, width, height) {
-            const dots = [];
-            for (let x = 0; x < width; x += spacing) {
-                for (let y = 0; y < height; y += spacing) {
-                    dots.push([x, y]);
-                }
-            }
-            return dots;
-        }
-
-        function getCountryAtPoint(point) {
-            try {
-                const coordinates = currentProjection.invert(point);
-                if (!coordinates) return null;
-                
-                const [longitude, latitude] = coordinates;
-                
-                if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
-                
-                for (const country of world.features) {
-                    if (d3.geoContains(country, [longitude, latitude])) {
-                        return country;
-                    }
-                }
-                return null;
-            } catch (e) {
-                return null;
-            }
-        }
-
-        function isPointInProjection(point) {
-            try {
-                const coords = currentProjection.invert(point);
-                if (!coords) return false;
-                const [lon, lat] = coords;
-                return !isNaN(lon) && !isNaN(lat) && 
-                       Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
-            } catch (e) {
-                return false;
-            }
-        }
-
-        function getProjectionOutline() {
-            return {type: "Sphere"};
-        }
-
-        function setupProjection(projectionName, width, height) {
-            currentProjection = d3[projectionName]()
-                .fitSize([width, height], {type: "Sphere"});
-
-            switch(projectionName) {
-                case 'geoOrthographic':
-                case 'geoStereographic':
-                    currentProjection.clipAngle(90);
-                    break;
-                case 'geoGnomonic':
-                    currentProjection.clipAngle(60);
-                    break;
-                case 'geoAlbers':
-                case 'geoConicEqualArea':
-                case 'geoConicEquidistant':
-                    currentProjection
-                        .parallels([20, 50])
-                        .center([0, 40]);
-                    break;
-            }
-
-            return currentProjection;
-        }
-
-        function updateMap() {
-            const { width, height } = updateDimensions();
-            const projectionName = document.getElementById("projection").value;
-            const spacing = parseInt(document.getElementById("spacing").value);
-            const dotSize = parseInt(document.getElementById("dotSize").value);
-            const showCountries = document.getElementById("showCountries").checked;
-            const showOutline = document.getElementById("showOutline").checked;
-            const showOcean = document.getElementById("showOcean").checked;
-            const showDots = document.getElementById("showDots").checked;
-            const showGraticules = document.getElementById("showGraticules").checked;
-
-            const svg = d3.select("#map")
-                .attr("width", width)
-                .attr("height", height);
-
-            svg.selectAll("*").remove();
-            
-            currentProjection = setupProjection(projectionName, width, height);
-            path = d3.geoPath(currentProjection);
-
-            const clipId = "projection-clip";
-            const outline = getProjectionOutline();
-            
-            svg.append("defs")
-                .append("clipPath")
-                .attr("id", clipId)
-                .append("path")
-                .attr("d", path(outline));
-
-            const mainGroup = svg.append("g")
-                .attr("clip-path", `url(#${clipId})`);
-
-            if (showOcean) {
-                mainGroup.append("rect")
-                    .attr("width", width)
-                    .attr("height", height)
-                    .attr("fill", "#cce5ff");
-            }
-
-            // Graticules
-            if (showGraticules) {
-                mainGroup.append("path")
-                    .datum(graticule)
-                    .attr("class", "graticule")
-                    .attr("d", path)
-                    .attr("fill", "none")
-                    .attr("stroke", "#ccc")
-                    .attr("stroke-width", 0.5)
-                    .attr("stroke-dasharray", "2,2");
-            }
-
-            // Countries
-            if (showCountries) {
-                mainGroup.append("g")
-                    .selectAll("path")
-                    .data(world.features)
-                    .enter()
-                    .append("path")
-                    .attr("d", path)
-                    .attr("fill", "#e0e0e0")
-                    .attr("stroke", "#999")
-                    .attr("stroke-width", 0.5);
-            }
-
-            // Dots
-            if (showDots) {
-                const dots = createDotsGrid(spacing, width, height)
-                    .filter(point => isPointInProjection(point));
-                
-                mainGroup.append("g")
-                    .selectAll("circle")
-                    .data(dots)
-                    .enter()
-                    .append("circle")
-                    .attr("cx", d => d[0])
-                    .attr("cy", d => d[1])
-                    .attr("r", dotSize)
-                    .attr("fill", d => {
-                        const country = getCountryAtPoint(d);
-                        return country ? countryColors[country.properties.name] : "#99ccff";
-                    })
-                    .attr("opacity", 0.8)
-                    .append("title")
-                    .text(d => {
-                        const country = getCountryAtPoint(d);
-                        return country ? country.properties.name : "Ocean";
-                    });
-            }
-
-            if (showOutline) {
-                svg.append("path")
-                    .datum(outline)
-                    .attr("d", path)
-                    .attr("fill", "none")
-                    .attr("stroke", "#000")
-                    .attr("stroke-width", 1);
-            }
-        }
-
-        d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json")
-            .then(topology => {
-                world = topojson.feature(topology, topology.objects.countries);
-            
-                world.features.forEach((country, i) => {
-                    countryColors[country.properties.name] = colorScale(i / world.features.length);
-                });
-            
-                updateMap();
-
-                document.getElementById("updateButton").addEventListener("click", updateMap);
-            })
-            .catch(error => {
-                console.error("Error loading data:", error);
-            });
-    </script>
+    <script src="index.js"></script>
 </body>
 </html>
