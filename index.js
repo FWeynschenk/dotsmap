@@ -31,7 +31,6 @@ let cacheManager = null;
 let isCalculating = false;
 let lookupMapBuilt = false;
 
-const colorScale = d3.scaleSequential(d3.interpolateRainbow);
 
 const colorScales = [
     d3.interpolateRainbow,
@@ -51,12 +50,25 @@ function generateColorScheme(countries, schemeName, baseColor) {
     
     switch (schemeName) {
         case 'rainbow':
-            countries.forEach((country, i) => {
+            // Generate all colors first
+            const rainbowColors = [];
+            for (let i = 0; i < countries.length; i++) {
                 const scaleIndex = Math.floor(i / (countries.length / colorScales.length));
                 const scale = colorScales[scaleIndex];
                 const basePosition = (i % (countries.length / colorScales.length)) / (countries.length / colorScales.length);
                 const variation = (Math.random() - 0.5) * 0.1;
-                colors.set(country.properties.name, scale(basePosition + variation));
+                rainbowColors.push(scale(basePosition + variation));
+            }
+            
+            // Shuffle the colors array using Fisher-Yates algorithm
+            for (let i = rainbowColors.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [rainbowColors[i], rainbowColors[j]] = [rainbowColors[j], rainbowColors[i]];
+            }
+            
+            // Assign shuffled colors to countries
+            countries.forEach((country, i) => {
+                colors.set(country.properties.name, rainbowColors[i]);
             });
             break;
             
