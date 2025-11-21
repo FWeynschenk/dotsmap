@@ -1,149 +1,180 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <style>
-        body {
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            min-height: 100vh;
-            box-sizing: border-box;
-        }
-        .container {
-            width: 80%;
-        }
-        .controls {
-            display: flex;
-            gap: 20px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-        .control-group {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        select, input[type="number"], input[type="color"] {
-            padding: 4px 8px;
-        }
-        .color-control {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            transition: opacity 0.3s;
-        }
-        button {
-            padding: 5px 15px;
-        }
-        .toggle-group {
-            display: flex;
-            gap: 16px;
-            flex-wrap: wrap;
-        }
-        #debug {
-            position: fixed;
-            bottom: 10px;
-            right: 10px;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            font-family: monospace;
-        }
-    </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dot Map Generator</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Preload fonts for better performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 </head>
 <body>
-    <div class="container">
-        <div class="controls">
-            <div class="control-group">
-                <label for="projection">Projection:</label>
-                <select id="projection">
-                    <option value="geoEquirectangular">Equirectangular</option>
-                    <option value="geoInterruptedBoggs">geoInterruptedBoggs</option>
-                    <option value="geoInterruptedSinusoidal">geoInterruptedSinusoidal</option>
-                    <option value="geoBerghaus">geoBerghaus</option>
-                    <option value="geoEqualEarth">Equal Earth</option>
-                    <option value="geoMercator">Mercator</option>
-                    <option value="geoNaturalEarth1">Natural Earth</option>
-                    <option value="geoAzimuthalEqualArea">Azimuthal Equal Area</option>
-                    <option value="geoAzimuthalEquidistant">Azimuthal Equidistant</option>
-                    <option value="geoGnomonic">Gnomonic</option>
-                    <option value="geoOrthographic">Orthographic</option>
-                    <option value="geoStereographic">Stereographic</option>
-                    <option value="geoAlbers">Albers</option>
-                    <option value="geoConicEqualArea">Conic Equal Area</option>
-                    <option value="geoConicEquidistant">Conic Equidistant</option>
-                    <option value="geoTransverseMercator">Transverse Mercator</option>
-                </select>
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>Dot Map Gen</h1>
             </div>
-            <div class="control-group">
-                <label for="colorScheme">Color Scheme:</label>
-                <select id="colorScheme">
-                  <option value="rainbow">Rainbow</option>
-                  <option value="greyscale">Greyscale</option>
-                  <option value="monotone">Monotone</option>
-                </select>
-              </div>
-              <div class="control-group color-control" id="monotoneControls" style="display: none;">
-                <label for="baseColor">Base Color:</label>
-                <input type="color" id="baseColor" value="#4444ff">
-              </div>
             
-            <div class="control-group">
-                <label for="spacing">Spacing:</label>
-                <input type="number" id="spacing" value="10" min="3" max="50">
+            <div class="controls-wrapper">
+                <div class="control-section">
+                    <div class="section-title">Projection & Data</div>
+                    
+                    <div class="control-group">
+                        <label for="projection">Projection</label>
+                        <select id="projection">
+                            <option value="geoEquirectangular">Equirectangular</option>
+                            <option value="geoInterruptedBoggs">Interrupted Boggs</option>
+                            <option value="geoInterruptedSinusoidal">Interrupted Sinusoidal</option>
+                            <option value="geoBerghaus">Berghaus Star</option>
+                            <option value="geoEqualEarth">Equal Earth</option>
+                            <option value="geoMercator">Mercator</option>
+                            <option value="geoNaturalEarth1">Natural Earth</option>
+                            <option value="geoAzimuthalEqualArea">Azimuthal Equal Area</option>
+                            <option value="geoAzimuthalEquidistant">Azimuthal Equidistant</option>
+                            <option value="geoGnomonic">Gnomonic</option>
+                            <option value="geoOrthographic">Orthographic</option>
+                            <option value="geoStereographic">Stereographic</option>
+                            <option value="geoAlbers">Albers</option>
+                            <option value="geoConicEqualArea">Conic Equal Area</option>
+                            <option value="geoConicEquidistant">Conic Equidistant</option>
+                            <option value="geoTransverseMercator">Transverse Mercator</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="colorScheme">Color Scheme</label>
+                        <select id="colorScheme">
+                            <option value="rainbow">Rainbow</option>
+                            <option value="greyscale">Greyscale</option>
+                            <option value="monotone">Monotone</option>
+                        </select>
+                    </div>
+                    
+                    <div class="control-group" id="monotoneControls" style="display: none;">
+                        <label for="baseColor">Base Color</label>
+                        <input type="color" id="baseColor" value="#4444ff">
+                    </div>
+                    
+                    <div class="section-title" style="margin-top: 1rem;">Render Size</div>
+                    
+                    <div class="control-group">
+                        <label for="renderWidth">Width (px)</label>
+                        <input type="number" id="renderWidth" value="1920" min="800" max="7680" step="10">
+                    </div>
+                    
+                    <div class="control-group">
+                        <label for="renderHeight">Height (px)</label>
+                        <input type="number" id="renderHeight" value="1080" min="600" max="4320" step="10">
+                    </div>
+                </div>
+
+                <div class="control-section">
+                    <div class="section-title">Appearance</div>
+                    
+                    <div class="control-group">
+                        <label for="spacing">Grid Spacing</label>
+                        <input type="number" id="spacing" value="10" min="3" max="50">
+                    </div>
+                    
+                    <div class="control-group">
+                        <label for="dotSize">Dot Size</label>
+                        <input type="number" id="dotSize" value="3" min="1" max="10">
+                    </div>
+                    
+                    <div class="toggle-grid">
+                        <label class="checkbox-wrapper">
+                            <input type="checkbox" id="showDots" checked>
+                            <span>Land Dots</span>
+                        </label>
+                        <label class="checkbox-wrapper">
+                            <input type="checkbox" id="showOceanDots">
+                            <span>Ocean Dots</span>
+                        </label>
+                        <label class="checkbox-wrapper">
+                            <input type="checkbox" id="showCountries">
+                            <span>Land Shape</span>
+                        </label>
+                        <label class="checkbox-wrapper">
+                            <input type="checkbox" id="showOcean">
+                            <span>Ocean BG</span>
+                        </label>
+                        <label class="checkbox-wrapper">
+                            <input type="checkbox" id="showOutline" checked>
+                            <span>Outline</span>
+                        </label>
+                        <label class="checkbox-wrapper">
+                            <input type="checkbox" id="showGraticules">
+                            <span>Grid Lines</span>
+                        </label>
+                    </div>
+                    
+                    <div class="section-title" style="margin-top: 1rem;">Options</div>
+                    
+                    <div class="toggle-grid">
+                        <label class="checkbox-wrapper">
+                            <input type="checkbox" id="enableHover" checked>
+                            <span>Tooltips</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <button id="updateButton">
+                        Update Map
+                    </button>
+                    <button id="buildLookupMap">
+                        Build Fast Lookup
+                    </button>
+                    <button id="clearCache">
+                        Clear Cache
+                    </button>
+                </div>
+                
+                <div class="control-section">
+                    <div class="section-title">Export</div>
+                    <div class="button-group">
+                        <button id="downloadSvg">
+                            Download SVG
+                        </button>
+                        <button id="downloadPng">
+                            Download PNG
+                        </button>
+                    </div>
+                </div>
             </div>
-            <div class="control-group">
-                <label for="dotSize">Dot Size:</label>
-                <input type="number" id="dotSize" value="3" min="1" max="10">
+        </aside>
+
+        <main class="main-content">
+            <div class="progress-container">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressBarFill"></div>
+                </div>
+                <div id="progressIndicator" class="status-pill" style="display: none;">
+                    Initializing...
+                </div>
             </div>
-            <div class="toggle-group">
-                <label>
-                    <input type="checkbox" id="showDots" checked>
-                    Dots
-                </label>
-                <label>
-                    <input type="checkbox" id="showOceanDots">
-                    Ocean Dots
-                </label>
-                <label>
-                    <input type="checkbox" id="showCountries">
-                    Land
-                </label>
-                <label>
-                    <input type="checkbox" id="showOcean">
-                    Ocean
-                </label>
-                <label>
-                    <input type="checkbox" id="showOutline" checked>
-                    Projection Outline
-                </label>
-                <label>
-                    <input type="checkbox" id="showGraticules">
-                    Grid Lines
-                </label>
-                <label>
-                    <input type="checkbox" id="enableHover" checked>
-                    Hover Info
-                </label>
-                <label>
-                    <input type="checkbox" id="showDebug">
-                    Debug Info
-                </label>
+
+            <div class="map-wrapper">
+                <svg id="map"></svg>
             </div>
-            <button id="updateButton">Update Map</button>
-        </div>
-        <svg id="map"></svg>
+
+            <div class="overlay-container overlay-top-right">
+                <div id="performanceInfo" class="info-card" style="display: none;"></div>
+            </div>
+
+            <div class="overlay-container overlay-bottom-right">
+                <div id="debug" class="info-card" style="display: none;"></div>
+            </div>
+        </main>
     </div>
-    <div id="debug" style="display: none"></div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/d3-geo-projection@4"></script>
 
+    <script src="cache-manager.js"></script>
+    <script src="worker-pool.js"></script>
     <script src="index.js"></script>
 </body>
 </html>

@@ -1,82 +1,38 @@
-function normalizePolygon(polygon) {
-    // Ensure polygon rings are correctly oriented and closed
-    return polygon.map(ring => {
-        if (ring[0][0] !== ring[ring.length - 1][0] || ring[0][1] !== ring[ring.length - 1][1]) {
-            ring = [...ring, ring[0]];
-        }
-        return ring;
-    });
+
+function getRenderDimensions() {
+    // Fixed rendering dimensions for deterministic output
+    // These are independent of viewport size
+    const renderWidth = parseInt(document.getElementById("renderWidth").value) || 1920;
+    const renderHeight = parseInt(document.getElementById("renderHeight").value) || 1080;
+    
+    return { width: renderWidth, height: renderHeight };
 }
 
-function normalizeGeometry(geometry) {
-    if (geometry.type === "Polygon") {
-        geometry.coordinates = normalizePolygon(geometry.coordinates);
-    } else if (geometry.type === "MultiPolygon") {
-        geometry.coordinates = geometry.coordinates.map(normalizePolygon);
-    }
-    return geometry;
-}
-
-function drawShape(selection, shape, size) {
-    switch (shape) {
-        case 'circle':
-            selection
-                .attr("d", null)
-                .attr("width", null)
-                .attr("height", null)
-                .attr("r", size);
-            break;
-            
-        case 'square':
-            const sideLength = size * 1.8; // Adjust size to appear visually similar to circle
-            selection
-                .attr("r", null)
-                .attr("width", sideLength)
-                .attr("height", sideLength)
-                .attr("x", d => d[0] - sideLength/2)
-                .attr("y", d => d[1] - sideLength/2);
-            break;
-            
-        case 'diamond':
-            const diamondSize = size * 2;
-            selection
-                .attr("r", null)
-                .attr("width", null)
-                .attr("height", null)
-                .attr("d", d => `M ${d[0]} ${d[1]-diamondSize} L ${d[0]+diamondSize} ${d[1]} L ${d[0]} ${d[1]+diamondSize} L ${d[0]-diamondSize} ${d[1]} Z`);
-            break;
-            
-        case 'triangle':
-            const triangleSize = size * 2;
-            selection
-                .attr("r", null)
-                .attr("width", null)
-                .attr("height", null)
-                .attr("d", d => `M ${d[0]} ${d[1]-triangleSize} L ${d[0]+triangleSize} ${d[1]+triangleSize} L ${d[0]-triangleSize} ${d[1]+triangleSize} Z`);
-            break;
-    }
-}
-
-function updateDimensions() {
-    const container = document.querySelector('.container');
-    const width = container.clientWidth;
-    const height = width * 0.6;
+function getDisplayDimensions() {
+    // Get actual display size for viewport scaling
+    const container = document.querySelector('.map-wrapper');
+    if (!container) return { width: 800, height: 600 };
+    
+    const width = container.clientWidth - 40;
+    const height = container.clientHeight - 40;
+    
     return { width, height };
 }
 
-let world;
+let world = { features: [] }; // Initialize with empty features
 let currentProjection;
 let path;
-let countryColors = {};
-let countryCircles = [];
-let spatialGrid = new Map(); // Grid for spatial indexing
-const GRID_SIZE = 10; // Degrees per grid cell
-const graticule = d3.geoGraticule();
+let countryColors = new Map();
 let debugInfo = { totalChecks: 0, circleChecks: 0, fullChecks: 0, gridChecks: 0 };
+
+// Enhanced Worker Pool and Cache
+let workerPool = null;
+let cacheManager = null;
+let isCalculating = false;
+let lookupMapBuilt = false;
 
 const colorScale = d3.scaleSequential(d3.interpolateRainbow);
 
-// Enhanced color generation
 const colorScales = [
     d3.interpolateRainbow,
     d3.interpolateWarm,
@@ -84,26 +40,9 @@ const colorScales = [
     d3.interpolatePlasma
 ];
 
-function debugCountry(name) {
-    const country = world.features.find(f => f.properties.name === name);
-    if (!country) {
-        console.log(`Country ${name} not found`);
-        return;
-    }
-    console.log(`Country ${name} found:`, {
-        type: country.geometry.type,
-        bounds: d3.geoBounds(country),
-        centroid: d3.geoCentroid(country),
-        properties: country.properties
-    });
-}
-
 function generateCountryColors(countries) {
     const scheme = document.getElementById("colorScheme").value;
     const baseColor = document.getElementById("baseColor").value;
-    
-    console.log(`gencountrycolors, ${scheme}, ${baseColor}`)
-
     return generateColorScheme(countries, scheme, baseColor);
 }
 
@@ -112,7 +51,6 @@ function generateColorScheme(countries, schemeName, baseColor) {
     
     switch (schemeName) {
         case 'rainbow':
-            // Current rainbow implementation
             countries.forEach((country, i) => {
                 const scaleIndex = Math.floor(i / (countries.length / colorScales.length));
                 const scale = colorScales[scaleIndex];
@@ -124,7 +62,7 @@ function generateColorScheme(countries, schemeName, baseColor) {
             
         case 'greyscale':
             countries.forEach((country, i) => {
-                const value = 0.2 + (0.6 * i / countries.length); // Range from 20% to 80% grey
+                const value = 0.2 + (0.6 * i / countries.length);
                 const variation = (Math.random() - 0.5) * 0.1;
                 const adjustedValue = Math.max(0.1, Math.min(0.9, value + variation));
                 colors.set(country.properties.name, `rgb(${Math.floor(adjustedValue * 255)},${Math.floor(adjustedValue * 255)},${Math.floor(adjustedValue * 255)})`);
@@ -132,7 +70,6 @@ function generateColorScheme(countries, schemeName, baseColor) {
             break;
             
         case 'monotone':
-            // Convert hex to RGB for manipulation
             const hex = baseColor.replace('#', '');
             const r = parseInt(hex.substring(0, 2), 16);
             const g = parseInt(hex.substring(2, 4), 16);
@@ -147,279 +84,6 @@ function generateColorScheme(countries, schemeName, baseColor) {
     }
     
     return colors;
-}
-
-function calculateCircularBounds(geometry) {
-    const bounds = d3.geoBounds(geometry);
-    let [minLon, minLat] = bounds[0];
-    let [maxLon, maxLat] = bounds[1];
-    
-    const isPolar = Math.abs(minLat) > 80 || Math.abs(maxLat) > 80;
-    const crossesAntimeridian = maxLon < minLon || (maxLon - minLon) > 350;
-    
-    const centroid = d3.geoCentroid(geometry);
-    const isRussia = centroid[1] > 50 && centroid[0] > 60 && centroid[0] < 180;
-    const isUSA = centroid[1] > 30 && centroid[0] < -30 && centroid[0] > -180;
-    const isAntarctica = centroid[1] < -60;
-    
-    // Special handling for specific regions
-    if (isAntarctica) {
-        return {
-            center: [0, -90],
-            radius: Math.PI / 2.5,
-            isPolar: true,
-            crossesAntimeridian: true,
-            isSpecialRegion: true,
-            regionType: 'antarctica'
-        };
-    }
-    
-    if (isRussia) {
-        return {
-            center: [100, 65],
-            radius: Math.PI / 2.5,
-            isPolar: true,
-            crossesAntimeridian: true,
-            isSpecialRegion: true,
-            regionType: 'russia'
-        };
-    }
-    
-    if (isUSA) {
-        // Create two bounding circles for USA/Alaska
-        const mainBounds = {
-            center: centroid,
-            radius: Math.PI / 4,
-            isPolar: false,
-            crossesAntimeridian: false,
-            isSpecialRegion: true,
-            regionType: 'usa-main'
-        };
-        
-        // Specific bounds for western Alaska
-        const alaskaBounds = {
-            center: [-170, 65], // Centered over western Alaska
-            radius: Math.PI / 3.5,
-            isPolar: true,
-            crossesAntimeridian: true,
-            isSpecialRegion: true,
-            regionType: 'usa-alaska'
-        };
-        
-        return [mainBounds, alaskaBounds];
-    }
-
-    if (isPolar) {
-        const latCenter = (minLat + maxLat) / 2;
-        if (latCenter > 60) {
-            return {
-                center: centroid,
-                radius: Math.PI / 3,
-                isPolar: true,
-                crossesAntimeridian: crossesAntimeridian,
-                isSpecialRegion: false,
-                regionType: 'polar'
-            };
-        }
-    }
-
-    let maxDistance = 0;
-    const sampleCount = isPolar ? 100 : 50;
-    
-    for (let i = 0; i <= sampleCount; i++) {
-        const lat = minLat + (maxLat - minLat) * (i / sampleCount);
-        for (let j = 0; j <= sampleCount; j++) {
-            let lon;
-            if (crossesAntimeridian) {
-                const span = (360 + maxLon - minLon) % 360;
-                lon = minLon + span * (j / sampleCount);
-                if (lon > 180) lon -= 360;
-            } else {
-                lon = minLon + (maxLon - minLon) * (j / sampleCount);
-            }
-            
-            if (d3.geoContains(geometry, [lon, lat])) {
-                const distance = d3.geoDistance(centroid, [lon, lat]);
-                maxDistance = Math.max(maxDistance, distance);
-            }
-        }
-    }
-
-    return {
-        center: centroid,
-        radius: maxDistance * (crossesAntimeridian ? 1.2 : 1.02),
-        isPolar,
-        crossesAntimeridian,
-        isSpecialRegion: false,
-        regionType: 'standard'
-    };
-}
-
-// Create spatial grid index
-function initializeSpatialGrid() {
-    spatialGrid.clear();
-    
-    countryCircles.forEach(({ country, bounds }) => {
-        const center = bounds.center;
-        const radiusDegrees = bounds.radius * 180 / Math.PI;
-        
-        const minLat = Math.max(-90, Math.floor((center[1] - radiusDegrees) / GRID_SIZE) * GRID_SIZE);
-        const maxLat = Math.min(90, Math.ceil((center[1] + radiusDegrees) / GRID_SIZE) * GRID_SIZE);
-        
-        // Calculate longitude range considering antimeridian
-        let minLon = Math.floor((center[0] - radiusDegrees) / GRID_SIZE) * GRID_SIZE;
-        let maxLon = Math.ceil((center[0] + radiusDegrees) / GRID_SIZE) * GRID_SIZE;
-        
-        for (let lat = minLat; lat < maxLat; lat += GRID_SIZE) {
-            for (let lon = minLon; lon < maxLon; lon += GRID_SIZE) {
-                const wrappedLon = ((lon + 180) % 360) - 180;
-                const cellKey = `${lat},${wrappedLon}`;
-                if (!spatialGrid.has(cellKey)) {
-                    spatialGrid.set(cellKey, []);
-                }
-                spatialGrid.get(cellKey).push({ country, bounds });
-            }
-        }
-    });
-}
-
-function getGridCell(coordinates) {
-    const [lon, lat] = coordinates;
-    const gridLat = Math.floor(lat / GRID_SIZE) * GRID_SIZE;
-    let gridLon = Math.floor(lon / GRID_SIZE) * GRID_SIZE;
-    
-    // Ensure longitude is in [-180, 180] range
-    gridLon = ((gridLon + 180) % 360) - 180;
-    
-    return `${gridLat},${gridLon}`;
-}
-
-function createDotsGrid(spacing, width, height) {
-    const dots = [];
-    for (let x = 0; x < width; x += spacing) {
-        for (let y = 0; y < height; y += spacing) {
-            dots.push([x, y]);
-        }
-    }
-    return dots;
-}
-
-function isValidCoordinate(coordinates) {
-    const [lon, lat] = coordinates;
-    return !isNaN(lon) && !isNaN(lat) && 
-           Math.abs(lat) <= 90 && 
-           isFinite(lon); // Allow any finite longitude
-}
-
-function wrapLongitude(lon) {
-    // More precise wrapping for edge cases
-    lon = ((lon + 180) % 360) - 180;
-    if (lon <= -180) lon += 360;
-    if (lon > 180) lon -= 360;
-    return lon;
-}
-
-function getCountryAtPoint(point) {
-    debugInfo.totalChecks++;
-    
-    try {
-        const coordinates = currentProjection.invert(point);
-        if (!coordinates || !isValidCoordinate(coordinates)) return null;
-        
-        let [lon, lat] = coordinates;
-        lon = wrapLongitude(lon);
-        
-        // Special handling for Alaska region
-        if (lat > 50 && lon < -150) {
-            debugInfo.fullChecks++;
-            // Check specifically for western Alaska points
-            for (const { country, bounds } of countryCircles) {
-                if (bounds.regionType === 'usa-alaska') {
-                    const testLons = [lon];
-                    if (lon < -170) testLons.push(lon + 360);
-                    
-                    for (const testLon of testLons) {
-                        if (d3.geoContains(country, [testLon, lat])) {
-                            return country;
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Handle other special regions
-        const isNearAntimeridian = lon > 150 || lon < -150;
-        const isHighLatitude = Math.abs(lat) > 60;
-        
-        if (isHighLatitude || isNearAntimeridian) {
-            for (const { country, bounds } of countryCircles) {
-                if (bounds.isSpecialRegion) {
-                    debugInfo.fullChecks++;
-                    const testLons = [lon];
-                    if (lon > 150) testLons.push(lon - 360);
-                    if (lon < -150) testLons.push(lon + 360);
-                    
-                    for (const testLon of testLons) {
-                        if (d3.geoContains(country, [testLon, lat])) {
-                            return country;
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Standard processing for other regions
-        const lons = [lon];
-        if (lon > 150) lons.push(lon - 360);
-        if (lon < -150) lons.push(lon + 360);
-        
-        debugInfo.gridChecks++;
-        const candidates = new Set(
-            lons.flatMap(testLon => {
-                const cell = getGridCell([testLon, lat]);
-                return spatialGrid.get(cell) || [];
-            })
-        );
-
-        for (const { country, bounds } of candidates) {
-            debugInfo.circleChecks++;
-            
-            if (bounds.isPolar || bounds.crossesAntimeridian) {
-                debugInfo.fullChecks++;
-                if (lons.some(testLon => d3.geoContains(country, [testLon, lat]))) {
-                    return country;
-                }
-            } else {
-                const withinBounds = lons.some(testLon => 
-                    d3.geoDistance(bounds.center, [testLon, lat]) <= bounds.radius
-                );
-                
-                if (withinBounds) {
-                    debugInfo.fullChecks++;
-                    if (lons.some(testLon => d3.geoContains(country, [testLon, lat]))) {
-                        return country;
-                    }
-                }
-            }
-        }
-        
-        return null;
-    } catch (e) {
-        console.error('Error in getCountryAtPoint:', e);
-        return null;
-    }
-}
-
-function isPointInProjection(point) {
-    try {
-        const coords = currentProjection.invert(point);
-        if (!coords) return false;
-        const [lon, lat] = coords;
-        return !isNaN(lon) && !isNaN(lat) &&
-            Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
-    } catch (e) {
-        return false;
-    }
 }
 
 function getProjectionOutline() {
@@ -450,29 +114,87 @@ function setupProjection(projectionName, width, height) {
     return currentProjection;
 }
 
-function updateDebugInfo() {
-    const debug = document.getElementById('debug');
-    if (document.getElementById('showDebug').checked) {
-        debug.style.display = 'block';
-        debug.innerHTML = `
-            Total points checked: ${debugInfo.totalChecks}<br>
-            Grid cell checks: ${debugInfo.gridChecks}<br>
-            Circle bound checks: ${debugInfo.circleChecks}<br>
-            Full geometry checks: ${debugInfo.fullChecks}<br>
-            Grid filter efficiency: ${((1 - debugInfo.circleChecks / debugInfo.gridChecks) * 100).toFixed(1)}%<br>
-            Circle filter efficiency: ${((1 - debugInfo.fullChecks / debugInfo.circleChecks) * 100).toFixed(1)}%
-        `;
-    } else {
-        debug.style.display = 'none';
+
+function drawDots(dotsData, dotSize, enableHover, showOceanDots) {
+    const svg = d3.select("#map");
+    const mainGroup = svg.select("g"); // Assume main group exists
+    
+    // Remove existing dots
+    mainGroup.select(".dots-group").remove();
+
+    if (!dotsData || dotsData.length === 0) return;
+
+    const dotsGroup = mainGroup.append("g").attr("class", "dots-group");
+    
+    // Create tooltip if not exists
+    let tooltip = d3.select("body").select(".dot-tooltip");
+    if (tooltip.empty()) {
+        tooltip = d3.select("body").append("div")
+            .attr("class", "dot-tooltip")
+            .style("position", "absolute")
+            .style("visibility", "hidden")
+            .style("background-color", "rgba(255, 255, 255, 0.9)")
+            .style("padding", "5px")
+            .style("border", "1px solid #999")
+            .style("border-radius", "4px")
+            .style("pointer-events", "none")
+            .style("font-family", "sans-serif")
+            .style("font-size", "12px")
+            .style("z-index", "1000");
+    }
+
+    dotsGroup.selectAll("circle")
+        .data(dotsData)
+        .join("circle")
+        .attr("cx", d => d.x)
+        .attr("cy", d => d.y)
+        .attr("r", dotSize)
+        .attr("fill", d => d.countryName ? (countryColors.get(d.countryName) || "#99ccff") : "#99ccff")
+        .attr("opacity", 0.8);
+
+    if (enableHover) {
+        dotsGroup.selectAll("circle")
+            .on("mouseover", function(event, d) {
+                if (!d.coords) return;
+                
+                const [lon, lat] = d.coords;
+                const countryName = d.countryName || "Ocean";
+                
+                tooltip
+                    .style("visibility", "visible")
+                    .html(`
+                        Location: ${countryName}<br>
+                        Lat: ${lat.toFixed(2)}°<br>
+                        Lon: ${lon.toFixed(2)}°
+                    `);
+                
+                d3.select(this)
+                    .attr("stroke", "#000")
+                    .attr("stroke-width", "1px")
+                    .attr("opacity", 1);
+            })
+            .on("mousemove", function(event) {
+                tooltip
+                    .style("top", (event.pageY + 10) + "px")
+                    .style("left", (event.pageX + 10) + "px");
+            })
+            .on("mouseout", function() {
+                tooltip.style("visibility", "hidden");
+                d3.select(this)
+                    .attr("stroke", null)
+                    .attr("stroke-width", null)
+                    .attr("opacity", 0.8);
+            });
     }
 }
 
 function updateMap() {
-    countryColors = generateCountryColors(world.features);
+    if (world.features.length === 0) return; // Not ready yet
 
-    debugInfo = { totalChecks: 0, circleChecks: 0, fullChecks: 0, gridChecks: 0 };
+    // Use fixed rendering dimensions for deterministic output
+    const { width, height } = getRenderDimensions();
+    const displayDims = getDisplayDimensions();
     
-    const { width, height } = updateDimensions();
     const projectionName = document.getElementById("projection").value;
     const spacing = parseInt(document.getElementById("spacing").value);
     const dotSize = parseInt(document.getElementById("dotSize").value);
@@ -484,9 +206,14 @@ function updateMap() {
     const showOceanDots = document.getElementById("showOceanDots").checked;
     const enableHover = document.getElementById("enableHover").checked;
 
+    // Generate colors
+    countryColors = generateCountryColors(world.features);
+
     const svg = d3.select("#map")
-        .attr("width", width)
-        .attr("height", height);
+        .attr("width", displayDims.width)
+        .attr("height", displayDims.height)
+        .attr("viewBox", `0 0 ${width} ${height}`)
+        .attr("preserveAspectRatio", "xMidYMid meet");
 
     svg.selectAll("*").remove();
     
@@ -514,7 +241,7 @@ function updateMap() {
 
     if (showGraticules) {
         mainGroup.append("path")
-            .datum(graticule)
+            .datum(d3.geoGraticule())
             .attr("class", "graticule")
             .attr("d", path)
             .attr("fill", "none")
@@ -535,85 +262,6 @@ function updateMap() {
             .attr("stroke-width", 0.5);
     }
 
-    if (showDots) {
-        console.time('dot placement');
-        const dots = createDotsGrid(spacing, width, height)
-            .filter(point => isPointInProjection(point));
-        
-        const dotsGroup = mainGroup.append("g");
-        
-        // Create tooltip
-        const tooltip = d3.select("body").selectAll(".dot-tooltip").data([0])
-            .join("div")
-            .attr("class", "dot-tooltip")
-            .style("position", "absolute")
-            .style("visibility", "hidden")
-            .style("background-color", "rgba(255, 255, 255, 0.9)")
-            .style("padding", "5px")
-            .style("border", "1px solid #999")
-            .style("border-radius", "4px")
-            .style("pointer-events", "none")
-            .style("font-family", "sans-serif")
-            .style("font-size", "12px")
-            .style("z-index", "1000");
-    
-        dotsGroup.selectAll("circle")
-            .data(dots)
-            .join("circle")
-            .each(function(d) {
-                // Store both country and coordinates for each dot
-                const country = getCountryAtPoint(d);
-                d.country = country;
-                d.coords = currentProjection.invert(d);
-            })
-            .filter(d => showOceanDots || d.country)
-            .attr("cx", d => d[0])
-            .attr("cy", d => d[1])
-            .attr("r", dotSize)
-            .attr("fill", d => d.country ? countryColors.get(d.country.properties.name) : "#99ccff")
-            .attr("opacity", 0.8);
-    
-        if (enableHover) {
-            dotsGroup.selectAll("circle")
-                .on("mouseover", function(event, d) {
-                    if (!d.coords) return;
-                    
-                    const [lon, lat] = d.coords;
-                    const countryName = d.country ? d.country.properties.name : "Ocean";
-                    
-                    tooltip
-                        .style("visibility", "visible")
-                        .html(`
-                            Location: ${countryName}<br>
-                            Lat: ${lat.toFixed(2)}°<br>
-                            Lon: ${lon.toFixed(2)}°
-                        `);
-                    
-                    // Highlight the hovered dot
-                    d3.select(this)
-                        .attr("stroke", "#000")
-                        .attr("stroke-width", "1px")
-                        .attr("opacity", 1);
-                })
-                .on("mousemove", function(event) {
-                    tooltip
-                        .style("top", (event.pageY + 10) + "px")
-                        .style("left", (event.pageX + 10) + "px");
-                })
-                .on("mouseout", function() {
-                    tooltip.style("visibility", "hidden");
-                    
-                    // Remove highlight
-                    d3.select(this)
-                        .attr("stroke", null)
-                        .attr("stroke-width", null)
-                        .attr("opacity", 0.8);
-                });
-        }
-    
-        console.timeEnd('dot placement');
-    }
-
     if (showOutline) {
         svg.append("path")
             .datum(outline)
@@ -623,75 +271,343 @@ function updateMap() {
             .attr("stroke-width", 1);
     }
 
-    updateDebugInfo();
+    if (showDots) {
+        calculateDotsOptimized({
+            width,
+            height,
+            projectionName,
+            spacing,
+            showOceanDots,
+            dotSize,
+            enableHover
+        });
+    }
 }
 
-Promise.all([
-    d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json")
-]).then(([topology]) => {
-    world = topojson.feature(topology, topology.objects.countries);
+async function calculateDotsOptimized(params) {
+    if (isCalculating) {
+        console.log("Already calculating, skipping...");
+        return;
+    }
     
-    // Debug Russia's data
-    debugCountry("Russia");
-    world.features = world.features.map(feature => {
-        // Enhance coordinate wrapping for problematic regions
-        const processCoordinates = coords => {
-            return coords.map(coord => {
-                let [lon, lat] = coord;
-                // Special handling for high latitudes
-                if (Math.abs(lat) > 60) {
-                    if (lon > 180) lon -= 360;
-                    if (lon <= -180) lon += 360;
-                }
-                return [wrapLongitude(lon), lat];
-            });
-        };
+    const { width, height, projectionName, spacing, showOceanDots, dotSize, enableHover } = params;
     
-        if (feature.geometry.type === "MultiPolygon") {
-            feature.geometry.coordinates = feature.geometry.coordinates.map(poly =>
-                poly.map(processCoordinates)
-            );
-        } else if (feature.geometry.type === "Polygon") {
-            feature.geometry.coordinates = feature.geometry.coordinates.map(processCoordinates);
+    // Check cache first
+    const cached = cacheManager.get(params);
+    if (cached) {
+        debugInfo = cached.debugInfo;
+        drawDots(cached.dots, dotSize, enableHover, showOceanDots);
+        showPerformanceInfo("Instant (cached)", cached.dots.length);
+        return;
+    }
+    
+    // Not in cache, calculate using worker pool
+    isCalculating = true;
+    const updateButton = document.getElementById("updateButton");
+    const progressIndicator = document.getElementById("progressIndicator");
+    
+    updateButton.textContent = "Calculating...";
+    updateButton.disabled = true;
+    if (progressIndicator) {
+        progressIndicator.style.display = "block";
+        progressIndicator.textContent = "Initializing parallel workers...";
+    }
+    
+    try {
+        const startTime = performance.now();
+        
+        // Use parallel workers
+        const result = await workerPool.calculateDotsParallel(params, (progress) => {
+            updateButton.textContent = `Calculating... ${progress}%`;
+            if (progressIndicator) {
+                progressIndicator.textContent = `Processing chunks: ${progress}% complete`;
+            }
+        });
+        
+        const endTime = performance.now();
+        const calculationTime = (endTime - startTime).toFixed(0);
+        console.log(`[OK] Calculation took ${calculationTime}ms using ${result.debugInfo.parallelWorkers || 'multiple'} workers`);
+        
+        debugInfo = result.debugInfo;
+        
+        // Cache the result
+        cacheManager.set(params, result);
+        
+        // Draw
+        drawDots(result.dots, dotSize, enableHover, showOceanDots);
+        showPerformanceInfo(`${calculationTime}ms (${result.debugInfo.parallelWorkers || 'multi'} workers)`, result.dots.length);
+        
+        updateButton.textContent = "Update Map";
+    } catch (error) {
+        console.error("Calculation error:", error);
+        updateButton.textContent = "Error - Try Again";
+        if (progressIndicator) {
+            progressIndicator.textContent = "Error occurred during calculation";
+            progressIndicator.style.backgroundColor = "#ffebee";
+        }
+    } finally {
+        updateButton.disabled = false;
+        isCalculating = false;
+        if (progressIndicator) {
+            setTimeout(() => {
+                progressIndicator.style.display = "none";
+                progressIndicator.style.backgroundColor = "#e3f2fd";
+            }, 2000);
+        }
+    }
+}
+
+function showPerformanceInfo(time, dotCount) {
+    const perfInfo = document.getElementById("performanceInfo");
+    if (perfInfo) {
+        perfInfo.innerHTML = `
+            Performance<br>
+            Time: ${time}<br>
+            Dots: ${dotCount.toLocaleString()}<br>
+            Workers: ${workerPool ? workerPool.numWorkers : 'N/A'}
+        `;
+        perfInfo.style.display = "block";
+        
+        // Auto-hide after 5 seconds
+        setTimeout(() => {
+            perfInfo.style.display = "none";
+        }, 5000);
+    }
+}
+
+async function loadPrerenderedSVG() {
+    try {
+        const response = await fetch('map-1763722299540.svg');
+        const svgText = await response.text();
+        
+        // Parse the SVG
+        const parser = new DOMParser();
+        const svgDoc = parser.parseFromString(svgText, 'image/svg+xml');
+        const loadedSvg = svgDoc.documentElement;
+        
+        // Get the target SVG element
+        const targetSvg = document.getElementById('map');
+        
+        // Copy attributes
+        const displayDims = getDisplayDimensions();
+        targetSvg.setAttribute('width', displayDims.width);
+        targetSvg.setAttribute('height', displayDims.height);
+        targetSvg.setAttribute('viewBox', loadedSvg.getAttribute('viewBox'));
+        targetSvg.setAttribute('preserveAspectRatio', loadedSvg.getAttribute('preserveAspectRatio'));
+        
+        // Copy all child elements
+        while (loadedSvg.firstChild) {
+            targetSvg.appendChild(loadedSvg.firstChild);
         }
         
-        return feature;
-    });
-    
-    console.time('preprocessing');
-    // Pre-calculate circular bounds
-    countryCircles = world.features.flatMap(country => {
-        const bounds = calculateCircularBounds(country);
-        if (Array.isArray(bounds)) {
-            // Handle multiple bounds (like USA/Alaska)
-            return bounds.map(bound => ({
-                country: country,
-                bounds: bound
-            }));
+        console.log('Prerendered SVG loaded successfully');
+    } catch (error) {
+        console.warn('Failed to load prerendered SVG:', error);
+    }
+}
+
+async function initializeApplication() {
+    try {
+        // Show loading message
+        const updateButton = document.getElementById("updateButton");
+        updateButton.textContent = "Loading...";
+        updateButton.disabled = true;
+        
+        // Load prerendered SVG for initial display
+        await loadPrerenderedSVG();
+        
+        // Load world data
+        const topology = await d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json");
+        
+        // Initialize cache manager
+        cacheManager = new CacheManager(10, true);
+        console.log('Cache stats:', cacheManager.getStats());
+        
+        // Initialize worker pool
+        const numWorkers = Math.min(navigator.hardwareConcurrency || 4, 6);
+        workerPool = new WorkerPool(numWorkers);
+        
+        // Initialize workers with world data
+        world.features = await workerPool.init(topology);
+        console.log("Workers initialized with world data");
+        
+        // Setup event listeners
+        document.getElementById("updateButton").addEventListener("click", updateMap);
+        
+        document.getElementById("colorScheme").addEventListener("change", function() {
+            const isMonotone = this.value === "monotone";
+            document.getElementById("monotoneControls").style.display = isMonotone ? "flex" : "none";
+            updateMap();
+        });
+        
+        // Add button to build lookup map for ultra-fast performance
+        const buildLookupButton = document.getElementById("buildLookupMap");
+        if (buildLookupButton) {
+            buildLookupButton.addEventListener("click", async function() {
+                if (lookupMapBuilt) {
+                    alert("Lookup map already built!");
+                    return;
+                }
+                
+                const { width, height } = getRenderDimensions();
+                const projectionName = document.getElementById("projection").value;
+                
+                this.textContent = "Building 0%...";
+                this.disabled = true;
+                
+                try {
+                    await workerPool.buildLookupMap(
+                        { width, height, projectionName, resolution: 2 },
+                        (progress) => {
+                            this.textContent = `Building ${progress}%...`;
+                        }
+                    );
+                    
+                    lookupMapBuilt = true;
+                    this.textContent = "[OK] Lookup Map Built";
+                    this.style.backgroundColor = "#4CAF50";
+                    
+                    // Clear cache since we now have a faster method
+                    cacheManager.clear();
+                    
+                    alert("Ultra-fast lookup map built! Calculations will now be much faster.");
+                } catch (error) {
+                    console.error("Failed to build lookup map:", error);
+                    this.textContent = "Build Lookup Map";
+                    this.disabled = false;
+                }
+            });
         }
-        return [{
-            country: country,
-            bounds: bounds
-        }];
-    });
-    
-    
-    // Initialize spatial grid
-    initializeSpatialGrid();
-    
-    console.timeEnd('preprocessing');
-    
-    updateMap();
+        
+        // Add button to clear cache
+        const clearCacheButton = document.getElementById("clearCache");
+        if (clearCacheButton) {
+            clearCacheButton.addEventListener("click", function() {
+                cacheManager.clear();
+                lookupMapBuilt = false;
+                alert("Cache cleared!");
+            });
+        }
+        
+        // Add download SVG button
+        const downloadSvgButton = document.getElementById("downloadSvg");
+        if (downloadSvgButton) {
+            downloadSvgButton.addEventListener("click", function() {
+                downloadAsSVG();
+            });
+        }
+        
+        // Add download PNG button
+        const downloadPngButton = document.getElementById("downloadPng");
+        if (downloadPngButton) {
+            downloadPngButton.addEventListener("click", function() {
+                downloadAsPNG();
+            });
+        }
+        
+        updateButton.textContent = "Update Map";
+        updateButton.disabled = false;
+        
+        console.log("Application initialized successfully");
+    } catch (error) {
+        console.error("Failed to initialize application:", error);
+        const updateButton = document.getElementById("updateButton");
+        updateButton.textContent = "Error - Reload Page";
+    }
+}
 
-    document.getElementById("updateButton").addEventListener("click", updateMap);
-    document.getElementById("showDebug").addEventListener("change", updateDebugInfo);
-
-    document.getElementById("colorScheme").addEventListener("change", function() {
-        const isMonotone = this.value === "monotone";
-        document.getElementById("monotoneControls").style.display = isMonotone ? "flex" : "none";
-    });
+function downloadAsSVG() {
+    const svg = document.getElementById('map');
+    if (!svg) {
+        alert("No map to download!");
+        return;
+    }
     
-    window.addEventListener('resize', () => {
-        updateMap();
+    // Clone the SVG to avoid modifying the display
+    const svgClone = svg.cloneNode(true);
+    
+    // Use render dimensions for the download
+    const { width, height } = getRenderDimensions();
+    svgClone.setAttribute('width', width);
+    svgClone.setAttribute('height', height);
+    svgClone.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    
+    // Serialize the SVG
+    const serializer = new XMLSerializer();
+    const svgString = serializer.serializeToString(svgClone);
+    
+    // Create blob and download
+    const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `map-${Date.now()}.svg`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+async function downloadAsPNG() {
+    const svg = document.getElementById('map');
+    if (!svg) {
+        alert("No map to download!");
+        return;
+    }
+    
+    try {
+        // Clone and prepare SVG
+        const svgClone = svg.cloneNode(true);
+        const { width, height } = getRenderDimensions();
+        svgClone.setAttribute('width', width);
+        svgClone.setAttribute('height', height);
+        svgClone.setAttribute('viewBox', `0 0 ${width} ${height}`);
+        
+        // Serialize SVG
+        const serializer = new XMLSerializer();
+        const svgString = serializer.serializeToString(svgClone);
+        
+        // Create data URL
+        const dataHeader = 'data:image/svg+xml;charset=utf-8';
+        const svgData = `${dataHeader},${encodeURIComponent(svgString)}`;
+        
+        // Load as image
+        const img = await loadImage(svgData);
+        
+        // Create canvas and draw image
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // Convert to PNG and download
+        canvas.toBlob((blob) => {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `map-${Date.now()}.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }, 'image/png', 1.0);
+        
+    } catch (error) {
+        console.error("Failed to download PNG:", error);
+        alert("Failed to download PNG. Please try SVG format instead.");
+    }
+}
+
+function loadImage(url) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = url;
     });
-});
+}
+
+// Start initialization
+initializeApplication();
