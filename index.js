@@ -609,5 +609,10 @@ function loadImage(url) {
     });
 }
 
-// Start initialization
-initializeApplication();
+// Start initialization - wait for DOM to be fully loaded
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeApplication);
+} else {
+    // DOM is already loaded
+    initializeApplication();
+}
