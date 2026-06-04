@@ -4,8 +4,10 @@ class CacheManager {
         this.memoryCache = new Map();
         this.maxMemoryItems = maxMemoryItems;
         this.useLocalStorage = useLocalStorage;
-        this.cachePrefix = 'dotsmap_cache_';
-        this.metadataKey = 'dotsmap_cache_metadata';
+        // Bump the version suffix whenever the dot-calculation algorithm changes
+        // so results cached by an older version are never served stale.
+        this.cachePrefix = 'dotsmap_cache_v2_';
+        this.metadataKey = 'dotsmap_cache_v2_metadata';
         
         // Load metadata from localStorage
         this.loadMetadata();

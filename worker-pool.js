@@ -6,8 +6,7 @@ class WorkerPool {
         this.availableWorkers = [];
         this.taskQueue = [];
         this.initialized = false;
-        this.lookupMapBuilt = false;
-        
+
         console.log(`Initializing worker pool with ${this.numWorkers} workers`);
         
         // Create workers
@@ -38,49 +37,6 @@ class WorkerPool {
         this.initialized = true;
         console.log('Worker pool initialized');
         return results[0]; // All workers return the same features
-    }
-    
-    // Build lookup map on one worker for ultra-fast queries
-    async buildLookupMap(params, onProgress) {
-        if (this.lookupMapBuilt) return;
-        
-        const worker = this.workers[0]; // Use first worker
-        
-        return new Promise((resolve, reject) => {
-            const handler = (e) => {
-                if (e.data.type === 'lookupProgress') {
-                    if (onProgress) onProgress(e.data.progress);
-                } else if (e.data.type === 'lookupComplete') {
-                    worker.removeEventListener('message', handler);
-                    this.lookupMapBuilt = true;
-                    
-                    // Broadcast to other workers to build their own maps
-                    const buildPromises = this.workers.slice(1).map(w => {
-                        return new Promise(res => {
-                            const h = (e) => {
-                                if (e.data.type === 'lookupComplete') {
-                                    w.removeEventListener('message', h);
-                                    res();
-                                }
-                            };
-                            w.addEventListener('message', h);
-                            w.postMessage({ type: 'buildLookupMap', payload: params });
-                        });
-                    });
-                    
-                    Promise.all(buildPromises).then(() => {
-                        console.log('All workers have lookup maps built');
-                        resolve();
-                    });
-                } else if (e.data.type === 'error') {
-                    worker.removeEventListener('message', handler);
-                    reject(new Error(e.data.error));
-                }
-            };
-            
-            worker.addEventListener('message', handler);
-            worker.postMessage({ type: 'buildLookupMap', payload: params });
-        });
     }
     
     // Calculate dots using all workers in parallel
@@ -246,7 +202,6 @@ class WorkerPool {
         this.workers = [];
         this.availableWorkers = [];
         this.initialized = false;
-        this.lookupMapBuilt = false;
     }
 }
 

@@ -29,7 +29,6 @@ let debugInfo = { totalChecks: 0, circleChecks: 0, fullChecks: 0, gridChecks: 0 
 let workerPool = null;
 let cacheManager = null;
 let isCalculating = false;
-let lookupMapBuilt = false;
 
 
 const colorScales = [
@@ -103,9 +102,12 @@ function getProjectionOutline() {
 }
 
 function setupProjection(projectionName, width, height) {
-    currentProjection = d3[projectionName]()
-        .fitSize([width, height], { type: "Sphere" });
+    currentProjection = d3[projectionName]();
 
+    // Configure projection parameters BEFORE fitSize so the fit (scale +
+    // translate) is computed for the final center/parallels/clip. This must
+    // stay in sync with setupProjection in fast-worker.js so the dots line up
+    // exactly with the borders.
     switch (projectionName) {
         case 'geoOrthographic':
         case 'geoStereographic':
@@ -122,6 +124,8 @@ function setupProjection(projectionName, width, height) {
                 .center([0, 40]);
             break;
     }
+
+    currentProjection.fitSize([width, height], { type: "Sphere" });
 
     return currentProjection;
 }
@@ -452,51 +456,11 @@ async function initializeApplication() {
             updateMap();
         });
         
-        // Add button to build lookup map for ultra-fast performance
-        const buildLookupButton = document.getElementById("buildLookupMap");
-        if (buildLookupButton) {
-            buildLookupButton.addEventListener("click", async function() {
-                if (lookupMapBuilt) {
-                    alert("Lookup map already built!");
-                    return;
-                }
-                
-                const { width, height } = getRenderDimensions();
-                const projectionName = document.getElementById("projection").value;
-                
-                this.textContent = "Building 0%...";
-                this.disabled = true;
-                
-                try {
-                    await workerPool.buildLookupMap(
-                        { width, height, projectionName, resolution: 2 },
-                        (progress) => {
-                            this.textContent = `Building ${progress}%...`;
-                        }
-                    );
-                    
-                    lookupMapBuilt = true;
-                    this.textContent = "[OK] Lookup Map Built";
-                    this.style.backgroundColor = "#4CAF50";
-                    
-                    // Clear cache since we now have a faster method
-                    cacheManager.clear();
-                    
-                    alert("Ultra-fast lookup map built! Calculations will now be much faster.");
-                } catch (error) {
-                    console.error("Failed to build lookup map:", error);
-                    this.textContent = "Build Lookup Map";
-                    this.disabled = false;
-                }
-            });
-        }
-        
         // Add button to clear cache
         const clearCacheButton = document.getElementById("clearCache");
         if (clearCacheButton) {
             clearCacheButton.addEventListener("click", function() {
                 cacheManager.clear();
-                lookupMapBuilt = false;
                 alert("Cache cleared!");
             });
         }
