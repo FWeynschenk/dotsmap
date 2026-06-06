@@ -283,23 +283,79 @@ function populateRegionChoices() {
 
 const OCEAN_DOT_COLOR = "#99ccff";
 
-// Last-rendered dots, kept so the SVG export can rebuild them as true vectors
-// even though the live view draws them to a canvas for speed.
+// Last-rendered dots + the style they were drawn with, kept so the SVG export
+// can rebuild them as true vectors even though the live view draws them to a
+// canvas for speed.
 let lastDotsData = null;
-let lastDotSize = 0;
+let lastDotStyle = null;
 
-function dotColor(d) {
-    return d.countryName
-        ? (countryColors.get(d.countryName) || OCEAN_DOT_COLOR)
-        : OCEAN_DOT_COLOR;
+// Vertices of a non-circular dot shape of "radius" r centered at (x, y).
+function shapeVertices(shape, x, y, r) {
+    switch (shape) {
+        case "square":
+            return [[x - r, y - r], [x + r, y - r], [x + r, y + r], [x - r, y + r]];
+        case "diamond":
+            return [[x, y - r], [x + r, y], [x, y + r], [x - r, y]];
+        case "triangle": {
+            const h = r * 0.8660254; // √3/2
+            return [[x, y - r], [x + h, y + r / 2], [x - h, y + r / 2]];
+        }
+        case "hexagon": {
+            const v = [];
+            for (let i = 0; i < 6; i++) {
+                const a = Math.PI / 3 * i; // flat-top hexagon
+                v.push([x + r * Math.cos(a), y + r * Math.sin(a)]);
+            }
+            return v;
+        }
+        default:
+            return null; // circle
+    }
 }
 
-// SVG path data for one filled circle of radius r at (x, y), as two half-arcs.
-function circleSubpath(x, y, r) {
+// Add one dot's outline to a canvas path.
+function addShapePath(ctx, shape, x, y, r) {
+    const v = shapeVertices(shape, x, y, r);
+    if (v) {
+        ctx.moveTo(v[0][0], v[0][1]);
+        for (let i = 1; i < v.length; i++) ctx.lineTo(v[i][0], v[i][1]);
+        ctx.closePath();
+        return;
+    }
+    // Circle: moveTo first so consecutive arcs aren't joined by a line.
+    ctx.moveTo(x + r, y);
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+}
+
+// SVG path data for one dot's shape.
+function shapePathD(shape, x, y, r) {
+    const v = shapeVertices(shape, x, y, r);
+    if (v) {
+        return "M" + v.map(p => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join("L") + "Z";
+    }
     return `M${x - r},${y}a${r},${r} 0 1,0 ${r * 2},0a${r},${r} 0 1,0 ${-r * 2},0`;
 }
 
-function drawDots(dotsData, dotSize, enableHover, showOceanDots) {
+// Partition dots into land (grouped by country color) and ocean.
+function partitionDots(dotsData) {
+    const landByColor = new Map();
+    const oceanDots = [];
+    for (const d of dotsData) {
+        if (d.countryName) {
+            const color = countryColors.get(d.countryName) || OCEAN_DOT_COLOR;
+            let arr = landByColor.get(color);
+            if (!arr) { arr = []; landByColor.set(color, arr); }
+            arr.push(d);
+        } else {
+            oceanDots.push(d);
+        }
+    }
+    return { landByColor, oceanDots };
+}
+
+function drawDots(dotsData, style) {
+    const { landShape, landSize, oceanShape, oceanSize, oceanColor, enableHover } = style;
+
     const svg = d3.select("#map");
     const mainGroup = svg.select("g"); // Assume main group exists
 
@@ -313,7 +369,7 @@ function drawDots(dotsData, dotSize, enableHover, showOceanDots) {
     }
 
     lastDotsData = dotsData;
-    lastDotSize = dotSize;
+    lastDotStyle = style;
 
     const dotsGroup = mainGroup.append("g").attr("class", "dots-group");
 
@@ -328,29 +384,21 @@ function drawDots(dotsData, dotSize, enableHover, showOceanDots) {
     canvas.height = height;
     const ctx = canvas.getContext("2d");
 
-    // Group by color so we issue one fillStyle + one fill() per color (≤ number
-    // of countries) instead of per dot. Dots are drawn opaque here; the 0.8
-    // translucency is applied once to the whole <image>, which also avoids any
-    // double-blending where dots overlap.
-    const dotsByColor = new Map();
-    for (const d of dotsData) {
-        const color = dotColor(d);
-        let arr = dotsByColor.get(color);
-        if (!arr) { arr = []; dotsByColor.set(color, arr); }
-        arr.push(d);
-    }
+    const { landByColor, oceanDots } = partitionDots(dotsData);
 
-    const TWO_PI = Math.PI * 2;
-    dotsByColor.forEach((dots, color) => {
+    // Land: one fillStyle + fill() per country color. Ocean: a single fill.
+    landByColor.forEach((dots, color) => {
         ctx.beginPath();
-        for (const d of dots) {
-            // moveTo before each arc so consecutive arcs aren't joined by a line.
-            ctx.moveTo(d.x + dotSize, d.y);
-            ctx.arc(d.x, d.y, dotSize, 0, TWO_PI);
-        }
+        for (const d of dots) addShapePath(ctx, landShape, d.x, d.y, landSize);
         ctx.fillStyle = color;
         ctx.fill();
     });
+    if (oceanDots.length) {
+        ctx.beginPath();
+        for (const d of oceanDots) addShapePath(ctx, oceanShape, d.x, d.y, oceanSize);
+        ctx.fillStyle = oceanColor;
+        ctx.fill();
+    }
 
     // Data URL (not a blob URL) so the embedded raster travels with the SVG when
     // it's serialized for download.
@@ -368,12 +416,12 @@ function drawDots(dotsData, dotSize, enableHover, showOceanDots) {
         .attr("pointer-events", "none");
 
     if (enableHover) {
-        setupDotHover(svg, dotsGroup, dotsData, dotSize);
+        setupDotHover(svg, dotsGroup, dotsData, landSize, oceanSize);
     }
 }
 
 // A single delegated mousemove handler + quadtree replaces per-dot listeners.
-function setupDotHover(svg, dotsGroup, dotsData, dotSize) {
+function setupDotHover(svg, dotsGroup, dotsData, landSize, oceanSize) {
     let tooltip = d3.select("body").select(".dot-tooltip");
     if (tooltip.empty()) {
         tooltip = d3.select("body").append("div")
@@ -391,14 +439,13 @@ function setupDotHover(svg, dotsGroup, dotsData, dotSize) {
 
     // Highlight ring that follows the hovered dot (one element, repositioned).
     const highlight = dotsGroup.append("circle")
-        .attr("r", dotSize)
         .attr("fill", "none")
         .attr("stroke", "#000")
         .attr("stroke-width", 1)
         .style("visibility", "hidden")
         .style("pointer-events", "none");
 
-    const searchRadius = Math.max(dotSize * 2, 6);
+    const searchRadius = Math.max(landSize, oceanSize, 4) * 2;
 
     svg.on("mousemove.dots", function(event) {
         // d3.pointer maps the screen event into the SVG's viewBox coordinate
@@ -428,6 +475,7 @@ function setupDotHover(svg, dotsGroup, dotsData, dotSize) {
         highlight
             .attr("cx", found.x)
             .attr("cy", found.y)
+            .attr("r", (found.countryName ? landSize : oceanSize) + 1)
             .style("visibility", "visible");
     });
 
@@ -448,6 +496,10 @@ function updateMap() {
     const spacing = parseInt(document.getElementById("spacing").value);
     const packing = document.getElementById("packing").value;
     const dotSize = parseInt(document.getElementById("dotSize").value);
+    const landDotShape = document.getElementById("landDotShape").value;
+    const oceanDotShape = document.getElementById("oceanDotShape").value;
+    const oceanDotSize = parseInt(document.getElementById("oceanDotSize").value);
+    const oceanDotColor = document.getElementById("oceanDotColor").value;
     const showCountries = document.getElementById("showCountries").checked;
     const showOutline = document.getElementById("showOutline").checked;
     const showOcean = document.getElementById("showOcean").checked;
@@ -538,6 +590,10 @@ function updateMap() {
             showLandDots: showDots,
             showOceanDots,
             dotSize,
+            landDotShape,
+            oceanDotShape,
+            oceanDotSize,
+            oceanDotColor,
             enableHover,
             selectedIndices: selection ? selection.indices : null,
             region: regionKey
@@ -556,13 +612,20 @@ async function calculateDotsOptimized(params) {
         return;
     }
 
-    const { width, height, projectionName, spacing, showOceanDots, dotSize, enableHover } = params;
+    const style = {
+        landShape: params.landDotShape,
+        landSize: params.dotSize,
+        oceanShape: params.oceanDotShape,
+        oceanSize: params.oceanDotSize,
+        oceanColor: params.oceanDotColor,
+        enableHover: params.enableHover
+    };
 
     // Check cache first
     const cached = dotCache.get(dotCacheKey(params));
     if (cached) {
         debugInfo = cached.debugInfo;
-        drawDots(cached.dots, dotSize, enableHover, showOceanDots);
+        drawDots(cached.dots, style);
         showPerformanceInfo("Instant (cached)", cached.dots.length);
         return;
     }
@@ -592,7 +655,7 @@ async function calculateDotsOptimized(params) {
         }
 
         // Draw
-        drawDots(result.dots, dotSize, enableHover, showOceanDots);
+        drawDots(result.dots, style);
         showPerformanceInfo(`${calculationTime}ms (${result.debugInfo.parallelWorkers || 'multi'} workers)`, result.dots.length);
 
         setStatus(null);
@@ -667,12 +730,20 @@ function updateColorControlsVisibility() {
     if (rainbow) rainbow.style.display = scheme === "rainbow" ? "flex" : "none";
 }
 
+// Show the ocean-dot styling block only when ocean dots are enabled.
+function updateDotControlsVisibility() {
+    const on = document.getElementById("showOceanDots").checked;
+    const block = document.getElementById("oceanDotStyle");
+    if (block) block.style.display = on ? "" : "none";
+}
+
 // Wire every setting so changing it re-renders automatically.
 function setupAutoUpdate() {
     // Numbers/colors fire on commit (blur/enter/picker close) rather than per
     // keystroke; selects and checkboxes fire on change.
     const autoUpdateIds = [
         "projection", "renderWidth", "renderHeight", "spacing", "packing", "dotSize",
+        "landDotShape", "oceanDotShape", "oceanDotSize", "oceanDotColor",
         "baseColor", "rainbowSeed", "showDots", "showOceanDots", "showCountries",
         "showOcean", "showOutline", "showGraticules", "enableHover"
     ];
@@ -680,6 +751,11 @@ function setupAutoUpdate() {
         const el = document.getElementById(id);
         if (el) el.addEventListener("change", scheduleUpdate);
     });
+
+    const oceanDotsToggle = document.getElementById("showOceanDots");
+    if (oceanDotsToggle) {
+        oceanDotsToggle.addEventListener("change", updateDotControlsVisibility);
+    }
 
     const colorScheme = document.getElementById("colorScheme");
     if (colorScheme) {
@@ -735,6 +811,7 @@ async function initializeApplication() {
 
         // Settings now drive the map automatically
         updateColorControlsVisibility();
+        updateDotControlsVisibility();
         setupAutoUpdate();
 
         // Add download SVG button
@@ -767,7 +844,7 @@ async function initializeApplication() {
 // elements (one per color), so the exported SVG has real scalable dots.
 function replaceRasterDotsWithVectors(svgClone) {
     const dotsGroup = svgClone.querySelector('.dots-group');
-    if (!dotsGroup || !lastDotsData || lastDotsData.length === 0) return;
+    if (!dotsGroup || !lastDotsData || lastDotsData.length === 0 || !lastDotStyle) return;
 
     // Drop the raster image (and any leftover hover highlight).
     while (dotsGroup.firstChild) dotsGroup.removeChild(dotsGroup.firstChild);
@@ -776,21 +853,25 @@ function replaceRasterDotsWithVectors(svgClone) {
     // double-blending where dots of different colors overlap).
     dotsGroup.setAttribute('opacity', '0.8');
 
-    const segmentsByColor = new Map();
-    for (const d of lastDotsData) {
-        const color = dotColor(d);
-        let segs = segmentsByColor.get(color);
-        if (!segs) { segs = []; segmentsByColor.set(color, segs); }
-        segs.push(circleSubpath(d.x, d.y, lastDotSize));
-    }
-
+    const { landShape, landSize, oceanShape, oceanSize, oceanColor } = lastDotStyle;
     const svgNS = 'http://www.w3.org/2000/svg';
-    segmentsByColor.forEach((segs, color) => {
+
+    // Land: one <path> per country color, in its shape/size. Ocean: one path.
+    const { landByColor, oceanDots } = partitionDots(lastDotsData);
+
+    const addPath = (segs, color) => {
         const path = document.createElementNS(svgNS, 'path');
         path.setAttribute('d', segs.join(''));
         path.setAttribute('fill', color);
         dotsGroup.appendChild(path);
+    };
+
+    landByColor.forEach((dots, color) => {
+        addPath(dots.map(d => shapePathD(landShape, d.x, d.y, landSize)), color);
     });
+    if (oceanDots.length) {
+        addPath(oceanDots.map(d => shapePathD(oceanShape, d.x, d.y, oceanSize)), oceanColor);
+    }
 }
 
 function downloadAsSVG() {

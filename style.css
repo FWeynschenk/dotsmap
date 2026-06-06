@@ -138,6 +138,16 @@ body {
     color: var(--text-dim);
 }
 
+.subhead {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text);
+    padding-top: 0.3rem;
+    border-top: 1px solid var(--border);
+}
+
 /* ---------- Inputs ---------- */
 select,
 input[type="number"] {
