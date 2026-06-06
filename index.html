@@ -13,21 +13,32 @@
     <div class="app-container">
         <aside class="sidebar">
             <div class="sidebar-header">
-                <h1>Dot Map Gen</h1>
+                <div class="brand-mark" aria-hidden="true">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <circle cx="3" cy="3" r="1.4"/><circle cx="8" cy="3" r="1.4"/><circle cx="13" cy="3" r="1.4"/>
+                        <circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/>
+                        <circle cx="3" cy="13" r="1.4"/><circle cx="8" cy="13" r="1.4"/><circle cx="13" cy="13" r="1.4"/>
+                    </svg>
+                </div>
+                <div class="brand-text">
+                    <h1>Dot Map Gen</h1>
+                    <p>Generate stippled world maps</p>
+                </div>
             </div>
-            
+
             <div class="controls-wrapper">
-                <div class="control-section">
-                    <div class="section-title collapsible-header" data-section="projection">
-                        <span>Projection & Data</span>
-                        <svg class="collapse-icon" width="12" height="12" viewBox="0 0 12 12">
+                <!-- PROJECTION -->
+                <section class="control-section">
+                    <button class="section-title collapsible-header" data-section="projection" type="button">
+                        <span>Projection</span>
+                        <svg class="collapse-icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
                             <path d="M2 4 L6 8 L10 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
-                    </div>
-                    
+                    </button>
+
                     <div class="collapsible-content" data-content="projection">
                         <div class="control-group">
-                            <label for="projection">Projection</label>
+                            <label for="projection">Map projection</label>
                             <select id="projection">
                                 <option value="geoEquirectangular">Equirectangular</option>
                                 <option value="geoInterruptedBoggs">Interrupted Boggs</option>
@@ -47,87 +58,97 @@
                                 <option value="geoTransverseMercator">Transverse Mercator</option>
                             </select>
                         </div>
+                    </div>
+                </section>
 
+                <!-- COLORS -->
+                <section class="control-section">
+                    <button class="section-title collapsible-header" data-section="colors" type="button">
+                        <span>Colors</span>
+                        <svg class="collapse-icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+                            <path d="M2 4 L6 8 L10 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+
+                    <div class="collapsible-content" data-content="colors">
                         <div class="control-group">
-                            <label for="colorScheme">Color Scheme</label>
+                            <label for="colorScheme">Color scheme</label>
                             <select id="colorScheme">
                                 <option value="rainbow">Rainbow</option>
                                 <option value="greyscale">Greyscale</option>
                                 <option value="monotone">Monotone</option>
                             </select>
                         </div>
-                        
+
                         <div class="control-group" id="monotoneControls" style="display: none;">
-                            <label for="baseColor">Base Color</label>
+                            <label for="baseColor">Base color</label>
                             <input type="color" id="baseColor" value="#4444ff">
                         </div>
 
                         <div class="control-group" id="rainbowControls">
-                            <label for="rainbowSeed">Rainbow Seed</label>
+                            <label for="rainbowSeed">Rainbow seed</label>
                             <div class="seed-row">
                                 <input type="number" id="rainbowSeed" value="1" min="0" step="1">
                                 <button id="randomizeSeed" type="button" title="Randomize seed">🎲</button>
                             </div>
+                            <p class="control-hint">Same seed → same colors. Reroll for a new palette.</p>
                         </div>
                     </div>
-                </div>
+                </section>
 
-                <div class="control-section">
-                    <div class="section-title collapsible-header collapsed" data-section="rendersize">
-                        <span>Render Size</span>
-                        <svg class="collapse-icon" width="12" height="12" viewBox="0 0 12 12">
+                <!-- DOTS -->
+                <section class="control-section">
+                    <button class="section-title collapsible-header" data-section="dots" type="button">
+                        <span>Dots</span>
+                        <svg class="collapse-icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
                             <path d="M2 4 L6 8 L10 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
-                    </div>
-                    
-                    <div class="collapsible-content collapsed" data-content="rendersize">
-                        <div class="control-group">
-                            <label for="renderWidth">Width (px)</label>
-                            <input type="number" id="renderWidth" value="1920" min="800" max="7680" step="10">
-                        </div>
-                        
-                        <div class="control-group">
-                            <label for="renderHeight">Height (px)</label>
-                            <input type="number" id="renderHeight" value="1080" min="600" max="4320" step="10">
-                        </div>
-                    </div>
-                </div>
+                    </button>
 
-                <div class="control-section">
-                    <div class="section-title collapsible-header" data-section="appearance">
-                        <span>Appearance</span>
-                        <svg class="collapse-icon" width="12" height="12" viewBox="0 0 12 12">
-                            <path d="M2 4 L6 8 L10 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                    </div>
-                    
-                    <div class="collapsible-content" data-content="appearance">
-                        <div class="control-group">
-                            <label for="spacing">Grid Spacing</label>
-                            <input type="number" id="spacing" value="10" min="3" max="50">
+                    <div class="collapsible-content" data-content="dots">
+                        <div class="control-row">
+                            <div class="control-group">
+                                <label for="spacing">Spacing</label>
+                                <input type="number" id="spacing" value="10" min="1" max="50">
+                            </div>
+                            <div class="control-group">
+                                <label for="dotSize">Dot size</label>
+                                <input type="number" id="dotSize" value="3" min="1" max="10">
+                            </div>
                         </div>
-                        
-                        <div class="control-group">
-                            <label for="dotSize">Dot Size</label>
-                            <input type="number" id="dotSize" value="3" min="1" max="10">
-                        </div>
-                        
+                        <p class="control-hint">Lower spacing = more dots (and slower).</p>
+
                         <div class="toggle-grid">
                             <label class="checkbox-wrapper">
                                 <input type="checkbox" id="showDots" checked>
-                                <span>Land Dots</span>
+                                <span>Land dots</span>
                             </label>
                             <label class="checkbox-wrapper">
                                 <input type="checkbox" id="showOceanDots">
-                                <span>Ocean Dots</span>
+                                <span>Ocean dots</span>
                             </label>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- LAYERS -->
+                <section class="control-section">
+                    <button class="section-title collapsible-header" data-section="layers" type="button">
+                        <span>Layers</span>
+                        <svg class="collapse-icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+                            <path d="M2 4 L6 8 L10 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+
+                    <div class="collapsible-content" data-content="layers">
+                        <div class="toggle-grid">
                             <label class="checkbox-wrapper">
                                 <input type="checkbox" id="showCountries">
-                                <span>Land Shape</span>
+                                <span>Land shape</span>
                             </label>
                             <label class="checkbox-wrapper">
                                 <input type="checkbox" id="showOcean">
-                                <span>Ocean BG</span>
+                                <span>Ocean fill</span>
                             </label>
                             <label class="checkbox-wrapper">
                                 <input type="checkbox" id="showOutline" checked>
@@ -135,21 +156,46 @@
                             </label>
                             <label class="checkbox-wrapper">
                                 <input type="checkbox" id="showGraticules">
-                                <span>Grid Lines</span>
+                                <span>Grid lines</span>
                             </label>
                         </div>
                     </div>
-                </div>
+                </section>
 
-                <div class="control-section">
-                    <div class="section-title collapsible-header" data-section="options">
-                        <span>Options</span>
-                        <svg class="collapse-icon" width="12" height="12" viewBox="0 0 12 12">
+                <!-- RENDER SIZE -->
+                <section class="control-section">
+                    <button class="section-title collapsible-header collapsed" data-section="rendersize" type="button">
+                        <span>Render size</span>
+                        <svg class="collapse-icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
                             <path d="M2 4 L6 8 L10 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
+                    </button>
+
+                    <div class="collapsible-content collapsed" data-content="rendersize">
+                        <div class="control-row">
+                            <div class="control-group">
+                                <label for="renderWidth">Width</label>
+                                <input type="number" id="renderWidth" value="1920" min="800" max="7680" step="10">
+                            </div>
+                            <div class="control-group">
+                                <label for="renderHeight">Height</label>
+                                <input type="number" id="renderHeight" value="1080" min="600" max="4320" step="10">
+                            </div>
+                        </div>
+                        <p class="control-hint">Output resolution used for export (in px).</p>
                     </div>
-                    
-                    <div class="collapsible-content" data-content="options">
+                </section>
+
+                <!-- OPTIONS -->
+                <section class="control-section">
+                    <button class="section-title collapsible-header collapsed" data-section="options" type="button">
+                        <span>Options</span>
+                        <svg class="collapse-icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+                            <path d="M2 4 L6 8 L10 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+
+                    <div class="collapsible-content collapsed" data-content="options">
                         <div class="toggle-grid">
                             <label class="checkbox-wrapper">
                                 <input type="checkbox" id="enableHover" checked>
@@ -157,26 +203,12 @@
                             </label>
                         </div>
                     </div>
-                </div>
+                </section>
+            </div>
 
-                <div class="control-section">
-                    <div class="section-title collapsible-header" data-section="export">
-                        <span>Export</span>
-                        <svg class="collapse-icon" width="12" height="12" viewBox="0 0 12 12">
-                            <path d="M2 4 L6 8 L10 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                    </div>
-                    <div class="collapsible-content" data-content="export">
-                        <div class="button-group">
-                            <button id="downloadSvg">
-                                Download SVG
-                            </button>
-                            <button id="downloadPng">
-                                Download PNG
-                            </button>
-                        </div>
-                    </div>
-                </div>
+            <div class="sidebar-footer">
+                <button id="downloadSvg" class="btn-primary">Download SVG</button>
+                <button id="downloadPng" class="btn-secondary">Download PNG</button>
             </div>
         </aside>
 
