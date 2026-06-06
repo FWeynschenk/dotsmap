@@ -90,7 +90,7 @@ function rasterizeCountries(projection, offsetX, rasterWidth, rasterHeight, draw
 
 // Process a chunk of the grid spanning x in [startX, endX).
 function processChunk(params, chunkId) {
-    const { width, height, projectionName, spacing, showOceanDots, startX, endX, selectedIndices } = params;
+    const { width, height, projectionName, spacing, showOceanDots, startX, endX, selectedIndices, packing } = params;
 
     const fitGeometry = buildFitGeometry(selectedIndices);
     const projection = setupProjection(projectionName, width, height, fitGeometry);
@@ -104,9 +104,17 @@ function processChunk(params, chunkId) {
 
     const results = [];
 
-    for (let x = startX; x < endX; x += spacing) {
-        const col = x - startX;
-        for (let y = 0; y < height; y += spacing) {
+    // Hexagonal packing offsets alternate rows by half a step and tightens the
+    // row pitch to spacing*√3/2 so neighbouring dots are equidistant. Row parity
+    // is global (every chunk starts at y=0), and startX is a multiple of spacing,
+    // so the offset grid stays seamless across chunk boundaries.
+    const hex = packing === 'hex';
+    const yStep = hex ? spacing * Math.sqrt(3) / 2 : spacing;
+    let row = 0;
+    for (let y = 0; y < height; y += yStep, row++) {
+        const xOffset = (hex && (row % 2 === 1)) ? spacing / 2 : 0;
+        const py = Math.min(height - 1, Math.max(0, Math.round(y)));
+        for (let x = startX + xOffset; x < endX; x += spacing) {
             const point = [x, y];
 
             // invert serves double duty: it clips points outside the projected
@@ -115,7 +123,8 @@ function processChunk(params, chunkId) {
             const coords = projection.invert(point);
             if (!isValidCoordinate(coords)) continue;
 
-            const country = lookupCountry(data, col, y, rasterWidth);
+            const col = Math.min(rasterWidth - 1, Math.max(0, Math.round(x - startX)));
+            const country = lookupCountry(data, col, py, rasterWidth);
             // When cropping, anything not in the selection is dropped (so a crop
             // never shows ocean dots over unselected land); otherwise ocean dots
             // depend on the toggle.

@@ -59,8 +59,8 @@ function setStatus(text, isError = false) {
 const dotCache = new Map();
 const DOT_CACHE_LIMIT = 10;
 
-function dotCacheKey({ projectionName, width, height, spacing, showOceanDots, region }) {
-    return `${projectionName}-${width}-${height}-${spacing}-${showOceanDots}-${region || "world"}`;
+function dotCacheKey({ projectionName, width, height, spacing, packing, showOceanDots, region }) {
+    return `${projectionName}-${width}-${height}-${spacing}-${packing || "square"}-${showOceanDots}-${region || "world"}`;
 }
 
 
@@ -446,6 +446,7 @@ function updateMap() {
     
     const projectionName = document.getElementById("projection").value;
     const spacing = parseInt(document.getElementById("spacing").value);
+    const packing = document.getElementById("packing").value;
     const dotSize = parseInt(document.getElementById("dotSize").value);
     const showCountries = document.getElementById("showCountries").checked;
     const showOutline = document.getElementById("showOutline").checked;
@@ -533,6 +534,7 @@ function updateMap() {
             height,
             projectionName,
             spacing,
+            packing,
             showOceanDots,
             dotSize,
             enableHover,
@@ -669,7 +671,7 @@ function setupAutoUpdate() {
     // Numbers/colors fire on commit (blur/enter/picker close) rather than per
     // keystroke; selects and checkboxes fire on change.
     const autoUpdateIds = [
-        "projection", "renderWidth", "renderHeight", "spacing", "dotSize",
+        "projection", "renderWidth", "renderHeight", "spacing", "packing", "dotSize",
         "baseColor", "rainbowSeed", "showDots", "showOceanDots", "showCountries",
         "showOcean", "showOutline", "showGraticules", "enableHover"
     ];
