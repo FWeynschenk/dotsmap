@@ -27,8 +27,17 @@ let debugInfo = { totalChecks: 0, circleChecks: 0, fullChecks: 0, gridChecks: 0 
 
 // Enhanced Worker Pool and Cache
 let workerPool = null;
-let cacheManager = null;
 let isCalculating = false;
+
+// Lightweight in-memory cache so repeat clicks with identical settings are
+// instant. No persistence — recomputing is cheap, and a fresh worker session
+// can never serve stale results from an older algorithm.
+const dotCache = new Map();
+const DOT_CACHE_LIMIT = 10;
+
+function dotCacheKey({ projectionName, width, height, spacing, showOceanDots }) {
+    return `${projectionName}-${width}-${height}-${spacing}-${showOceanDots}`;
+}
 
 
 const colorScales = [
@@ -309,7 +318,7 @@ async function calculateDotsOptimized(params) {
     const { width, height, projectionName, spacing, showOceanDots, dotSize, enableHover } = params;
     
     // Check cache first
-    const cached = cacheManager.get(params);
+    const cached = dotCache.get(dotCacheKey(params));
     if (cached) {
         debugInfo = cached.debugInfo;
         drawDots(cached.dots, dotSize, enableHover, showOceanDots);
@@ -346,8 +355,11 @@ async function calculateDotsOptimized(params) {
         
         debugInfo = result.debugInfo;
         
-        // Cache the result
-        cacheManager.set(params, result);
+        // Cache the result (simple LRU: drop the oldest entry past the limit)
+        dotCache.set(dotCacheKey(params), result);
+        if (dotCache.size > DOT_CACHE_LIMIT) {
+            dotCache.delete(dotCache.keys().next().value);
+        }
         
         // Draw
         drawDots(result.dots, dotSize, enableHover, showOceanDots);
@@ -434,11 +446,7 @@ async function initializeApplication() {
         
         // Load world data
         const topology = await d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json");
-        
-        // Initialize cache manager
-        cacheManager = new CacheManager(10, true);
-        console.log('Cache stats:', cacheManager.getStats());
-        
+
         // Initialize worker pool
         const numWorkers = Math.min(navigator.hardwareConcurrency || 4, 6);
         workerPool = new WorkerPool(numWorkers);
@@ -460,7 +468,7 @@ async function initializeApplication() {
         const clearCacheButton = document.getElementById("clearCache");
         if (clearCacheButton) {
             clearCacheButton.addEventListener("click", function() {
-                cacheManager.clear();
+                dotCache.clear();
                 alert("Cache cleared!");
             });
         }
