@@ -180,6 +180,22 @@ function setupProjection(projectionName, width, height) {
 
 const OCEAN_DOT_COLOR = "#99ccff";
 
+// Last-rendered dots, kept so the SVG export can rebuild them as true vectors
+// even though the live view draws them to a canvas for speed.
+let lastDotsData = null;
+let lastDotSize = 0;
+
+function dotColor(d) {
+    return d.countryName
+        ? (countryColors.get(d.countryName) || OCEAN_DOT_COLOR)
+        : OCEAN_DOT_COLOR;
+}
+
+// SVG path data for one filled circle of radius r at (x, y), as two half-arcs.
+function circleSubpath(x, y, r) {
+    return `M${x - r},${y}a${r},${r} 0 1,0 ${r * 2},0a${r},${r} 0 1,0 ${-r * 2},0`;
+}
+
 function drawDots(dotsData, dotSize, enableHover, showOceanDots) {
     const svg = d3.select("#map");
     const mainGroup = svg.select("g"); // Assume main group exists
@@ -188,7 +204,13 @@ function drawDots(dotsData, dotSize, enableHover, showOceanDots) {
     mainGroup.select(".dots-group").remove();
     svg.on("mousemove.dots", null).on("mouseleave.dots", null);
 
-    if (!dotsData || dotsData.length === 0) return;
+    if (!dotsData || dotsData.length === 0) {
+        lastDotsData = null;
+        return;
+    }
+
+    lastDotsData = dotsData;
+    lastDotSize = dotSize;
 
     const dotsGroup = mainGroup.append("g").attr("class", "dots-group");
 
@@ -209,9 +231,7 @@ function drawDots(dotsData, dotSize, enableHover, showOceanDots) {
     // double-blending where dots overlap.
     const dotsByColor = new Map();
     for (const d of dotsData) {
-        const color = d.countryName
-            ? (countryColors.get(d.countryName) || OCEAN_DOT_COLOR)
-            : OCEAN_DOT_COLOR;
+        const color = dotColor(d);
         let arr = dotsByColor.get(color);
         if (!arr) { arr = []; dotsByColor.set(color, arr); }
         arr.push(d);
@@ -407,6 +427,9 @@ function updateMap() {
             dotSize,
             enableHover
         });
+    } else {
+        // No dots on screen — make sure the SVG export doesn't emit a stale layer.
+        lastDotsData = null;
     }
 }
 
@@ -608,6 +631,36 @@ async function initializeApplication() {
     }
 }
 
+// Replace the rasterized dots <image> inside a cloned SVG with vector <path>
+// elements (one per color), so the exported SVG has real scalable dots.
+function replaceRasterDotsWithVectors(svgClone) {
+    const dotsGroup = svgClone.querySelector('.dots-group');
+    if (!dotsGroup || !lastDotsData || lastDotsData.length === 0) return;
+
+    // Drop the raster image (and any leftover hover highlight).
+    while (dotsGroup.firstChild) dotsGroup.removeChild(dotsGroup.firstChild);
+
+    // One group-level opacity matches the live image's 0.8 (and avoids
+    // double-blending where dots of different colors overlap).
+    dotsGroup.setAttribute('opacity', '0.8');
+
+    const segmentsByColor = new Map();
+    for (const d of lastDotsData) {
+        const color = dotColor(d);
+        let segs = segmentsByColor.get(color);
+        if (!segs) { segs = []; segmentsByColor.set(color, segs); }
+        segs.push(circleSubpath(d.x, d.y, lastDotSize));
+    }
+
+    const svgNS = 'http://www.w3.org/2000/svg';
+    segmentsByColor.forEach((segs, color) => {
+        const path = document.createElementNS(svgNS, 'path');
+        path.setAttribute('d', segs.join(''));
+        path.setAttribute('fill', color);
+        dotsGroup.appendChild(path);
+    });
+}
+
 function downloadAsSVG() {
     const svg = document.getElementById('map');
     if (!svg) {
@@ -617,13 +670,17 @@ function downloadAsSVG() {
     
     // Clone the SVG to avoid modifying the display
     const svgClone = svg.cloneNode(true);
-    
+
     // Use render dimensions for the download
     const { width, height } = getRenderDimensions();
     svgClone.setAttribute('width', width);
     svgClone.setAttribute('height', height);
     svgClone.setAttribute('viewBox', `0 0 ${width} ${height}`);
-    
+
+    // The live view draws dots to a raster <image> for speed; for the SVG export
+    // we swap that out for true vector dots so the download is fully scalable.
+    replaceRasterDotsWithVectors(svgClone);
+
     // Serialize the SVG
     const serializer = new XMLSerializer();
     const svgString = serializer.serializeToString(svgClone);
