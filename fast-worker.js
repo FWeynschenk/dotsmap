@@ -42,7 +42,21 @@ function initializeWorld(topology) {
         return `rgb(${r},${g},0)`;
     });
 
-    self.postMessage({ type: 'features', features: world.features });
+    // Adjacency list (by feature index) so the main thread can offer a
+    // "country + neighbours" crop without recomputing topology.
+    const neighbors = topojson.neighbors(topology.objects.countries.geometries);
+
+    self.postMessage({ type: 'features', features: world.features, neighbors });
+}
+
+// Build the geometry the projection is fitted to: the selected subset when a
+// region crop is active, otherwise the whole sphere.
+function buildFitGeometry(selectedIndices) {
+    if (!selectedIndices) return null;
+    return {
+        type: 'FeatureCollection',
+        features: selectedIndices.map(i => world.features[i])
+    };
 }
 
 // --- Rasterization-based country lookup ---
@@ -53,7 +67,7 @@ function initializeWorld(topology) {
 // using the SAME projection that draws the borders, giving each country a
 // unique color. A dot's country is then whatever color sits under its pixel.
 // This is O(1) per dot and pixel-perfect with the rendered borders.
-function rasterizeCountries(projection, offsetX, rasterWidth, rasterHeight) {
+function rasterizeCountries(projection, offsetX, rasterWidth, rasterHeight, drawIndices) {
     const canvas = new OffscreenCanvas(rasterWidth, rasterHeight);
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
@@ -62,7 +76,9 @@ function rasterizeCountries(projection, offsetX, rasterWidth, rasterHeight) {
 
     const path = d3.geoPath(projection, ctx);
 
-    for (let i = 0; i < world.features.length; i++) {
+    // Only the selected countries are drawn when a crop is active, so dots over
+    // everything else fall through to "ocean" and get filtered out.
+    for (const i of drawIndices) {
         ctx.beginPath();
         path(world.features[i]);
         ctx.fillStyle = featureColors[i];
@@ -74,12 +90,16 @@ function rasterizeCountries(projection, offsetX, rasterWidth, rasterHeight) {
 
 // Process a chunk of the grid spanning x in [startX, endX).
 function processChunk(params, chunkId) {
-    const { width, height, projectionName, spacing, showOceanDots, startX, endX } = params;
+    const { width, height, projectionName, spacing, showOceanDots, startX, endX, selectedIndices } = params;
 
-    const projection = setupProjection(projectionName, width, height);
+    const fitGeometry = buildFitGeometry(selectedIndices);
+    const projection = setupProjection(projectionName, width, height, fitGeometry);
+
+    const drawIndices = selectedIndices || world.features.map((_, i) => i);
+    const filterActive = !!selectedIndices;
 
     const rasterWidth = endX - startX;
-    const image = rasterizeCountries(projection, startX, rasterWidth, height);
+    const image = rasterizeCountries(projection, startX, rasterWidth, height, drawIndices);
     const data = image.data;
 
     const results = [];
@@ -96,7 +116,10 @@ function processChunk(params, chunkId) {
             if (!isValidCoordinate(coords)) continue;
 
             const country = lookupCountry(data, col, y, rasterWidth);
-            if (!country && !showOceanDots) continue;
+            // When cropping, anything not in the selection is dropped (so a crop
+            // never shows ocean dots over unselected land); otherwise ocean dots
+            // depend on the toggle.
+            if (!country && (filterActive || !showOceanDots)) continue;
 
             results.push({
                 x,
@@ -141,7 +164,7 @@ function isValidCoordinate(coordinates) {
         Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
 }
 
-function setupProjection(projectionName, width, height) {
+function setupProjection(projectionName, width, height, fitGeometry) {
     // Fall back gracefully if a projection name isn't available, rather than
     // throwing (must mirror setupProjection in index.js).
     const factory = typeof d3[projectionName] === "function" ? d3[projectionName] : d3.geoEquirectangular;
@@ -166,7 +189,11 @@ function setupProjection(projectionName, width, height) {
             break;
     }
 
-    projection.fitSize([width, height], { type: "Sphere" });
+    // Fit to the selected region when cropping (with a little padding),
+    // otherwise to the whole sphere. fitExtent with pad 0 == fitSize.
+    const geom = fitGeometry || { type: "Sphere" };
+    const pad = fitGeometry ? Math.min(width, height) * 0.04 : 0;
+    projection.fitExtent([[pad, pad], [width - pad, height - pad]], geom);
 
     return projection;
 }

@@ -20,6 +20,7 @@ function getDisplayDimensions() {
 }
 
 let world = { features: [] }; // Initialize with empty features
+let countryNeighbors = [];    // adjacency by feature index (from topojson)
 let currentProjection;
 let path;
 let countryColors = new Map();
@@ -58,8 +59,8 @@ function setStatus(text, isError = false) {
 const dotCache = new Map();
 const DOT_CACHE_LIMIT = 10;
 
-function dotCacheKey({ projectionName, width, height, spacing, showOceanDots }) {
-    return `${projectionName}-${width}-${height}-${spacing}-${showOceanDots}`;
+function dotCacheKey({ projectionName, width, height, spacing, showOceanDots, region }) {
+    return `${projectionName}-${width}-${height}-${spacing}-${showOceanDots}-${region || "world"}`;
 }
 
 
@@ -148,7 +149,7 @@ function getProjectionOutline() {
     return { type: "Sphere" };
 }
 
-function setupProjection(projectionName, width, height) {
+function setupProjection(projectionName, width, height, fitGeometry) {
     // Fall back gracefully if a projection name isn't available in this build of
     // d3 / d3-geo-projection, rather than throwing.
     const factory = typeof d3[projectionName] === "function" ? d3[projectionName] : d3.geoEquirectangular;
@@ -178,9 +179,105 @@ function setupProjection(projectionName, width, height) {
             break;
     }
 
-    currentProjection.fitSize([width, height], { type: "Sphere" });
+    // Fit to the cropped region (with padding) when one is selected, otherwise
+    // to the whole sphere. Must mirror setupProjection in fast-worker.js so the
+    // dots stay aligned with the borders.
+    const geom = fitGeometry || { type: "Sphere" };
+    const pad = fitGeometry ? Math.min(width, height) * 0.04 : 0;
+    currentProjection.fitExtent([[pad, pad], [width - pad, height - pad]], geom);
 
     return currentProjection;
+}
+
+
+// ---------- Region cropping ----------
+
+// Returns null for the whole world, otherwise { features, indices, key } for the
+// currently selected crop region.
+function getRegionSelection() {
+    const typeEl = document.getElementById("regionType");
+    if (!typeEl) return null;
+    const type = typeEl.value;
+    if (type === "world") return null;
+
+    const choice = document.getElementById("regionChoice").value;
+    if (!choice) return null;
+
+    let indices = [];
+    if (type === "hemisphere") {
+        world.features.forEach((f, i) => { if (inHemisphere(f, choice)) indices.push(i); });
+    } else if (type === "country") {
+        world.features.forEach((f, i) => { if (f.properties.name === choice) indices.push(i); });
+    } else if (type === "countryNeighbours") {
+        indices = countryWithNeighbours(choice);
+    } else if (type === "continent") {
+        world.features.forEach((f, i) => { if (continentOf(f) === choice) indices.push(i); });
+    } else if (type === "bloc") {
+        const members = blocMembers(choice);
+        world.features.forEach((f, i) => { if (members.has(f.properties.name)) indices.push(i); });
+    }
+
+    if (indices.length === 0) return null;
+    return { features: indices.map(i => world.features[i]), indices, key: `${type}:${choice}` };
+}
+
+function inHemisphere(feature, hemisphere) {
+    const c = d3.geoCentroid(feature); // [lon, lat]
+    switch (hemisphere) {
+        case "Northern": return c[1] >= 0;
+        case "Southern": return c[1] < 0;
+        case "Eastern":  return c[0] >= 0;
+        case "Western":  return c[0] < 0;
+        default: return false;
+    }
+}
+
+function countryWithNeighbours(name) {
+    const idx = world.features.findIndex(f => f.properties.name === name);
+    if (idx < 0) return [];
+    const set = new Set([idx]);
+    (countryNeighbors[idx] || []).forEach(n => set.add(n));
+    return [...set];
+}
+
+function countryNames() {
+    return world.features
+        .map(f => f.properties.name)
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b));
+}
+
+// Rebuild the secondary "Selection" dropdown to match the chosen crop type.
+function populateRegionChoices() {
+    const type = document.getElementById("regionType").value;
+    const wrap = document.getElementById("regionChoiceWrap");
+    const choice = document.getElementById("regionChoice");
+
+    let options = [];
+    if (type === "hemisphere") {
+        options = ["Northern", "Southern", "Eastern", "Western"];
+    } else if (type === "country" || type === "countryNeighbours") {
+        options = countryNames();
+    } else if (type === "continent") {
+        options = (typeof CONTINENTS !== "undefined") ? CONTINENTS : [];
+    } else if (type === "bloc") {
+        options = (typeof BLOCS !== "undefined") ? BLOCS : [];
+    }
+
+    if (options.length === 0) {
+        wrap.style.display = "none";
+        choice.innerHTML = "";
+        return;
+    }
+
+    wrap.style.display = "flex";
+    choice.innerHTML = "";
+    for (const o of options) {
+        const op = document.createElement("option");
+        op.value = o;
+        op.textContent = o;
+        choice.appendChild(op);
+    }
 }
 
 
@@ -358,6 +455,13 @@ function updateMap() {
     const showOceanDots = document.getElementById("showOceanDots").checked;
     const enableHover = document.getElementById("enableHover").checked;
 
+    // Determine the active crop region (null = whole world). Borders, dots and
+    // the projection fit are all derived from the same selection so they align.
+    const selection = getRegionSelection();
+    const fitGeometry = selection ? { type: "FeatureCollection", features: selection.features } : null;
+    const featuresToDraw = selection ? selection.features : world.features;
+    const regionKey = selection ? selection.key : "world";
+
     // Generate colors
     countryColors = generateCountryColors(world.features);
 
@@ -368,8 +472,8 @@ function updateMap() {
         .attr("preserveAspectRatio", "xMidYMid meet");
 
     svg.selectAll("*").remove();
-    
-    currentProjection = setupProjection(projectionName, width, height);
+
+    currentProjection = setupProjection(projectionName, width, height, fitGeometry);
     path = d3.geoPath(currentProjection);
 
     const clipId = "projection-clip";
@@ -405,7 +509,7 @@ function updateMap() {
     if (showCountries) {
         mainGroup.append("g")
             .selectAll("path")
-            .data(world.features)
+            .data(featuresToDraw)
             .enter()
             .append("path")
             .attr("d", path)
@@ -431,7 +535,9 @@ function updateMap() {
             spacing,
             showOceanDots,
             dotSize,
-            enableHover
+            enableHover,
+            selectedIndices: selection ? selection.indices : null,
+            region: regionKey
         });
     } else {
         // No dots on screen — make sure the SVG export doesn't emit a stale layer.
@@ -580,6 +686,18 @@ function setupAutoUpdate() {
         });
     }
 
+    const regionType = document.getElementById("regionType");
+    if (regionType) {
+        regionType.addEventListener("change", function() {
+            populateRegionChoices();
+            scheduleUpdate();
+        });
+    }
+    const regionChoice = document.getElementById("regionChoice");
+    if (regionChoice) {
+        regionChoice.addEventListener("change", scheduleUpdate);
+    }
+
     const randomizeSeed = document.getElementById("randomizeSeed");
     if (randomizeSeed) {
         randomizeSeed.addEventListener("click", function() {
@@ -604,8 +722,13 @@ async function initializeApplication() {
         workerPool = new WorkerPool(numWorkers);
 
         // Initialize workers with world data
-        world.features = await workerPool.init(topology);
+        const initData = await workerPool.init(topology);
+        world.features = initData.features;
+        countryNeighbors = initData.neighbors || [];
         console.log("Workers initialized with world data");
+
+        // Populate region crop choices now that we have the country list
+        populateRegionChoices();
 
         // Settings now drive the map automatically
         updateColorControlsVisibility();

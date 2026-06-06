@@ -18,25 +18,25 @@ class WorkerPool {
         }
     }
     
-    // Initialize all workers with world data
+    // Initialize all workers with world data. Returns { features, neighbors }.
     async init(topology) {
         const initPromises = this.workers.map(worker => {
             return new Promise((resolve) => {
                 const handler = (e) => {
                     if (e.data.type === 'features') {
                         worker.removeEventListener('message', handler);
-                        resolve(e.data.features);
+                        resolve({ features: e.data.features, neighbors: e.data.neighbors });
                     }
                 };
                 worker.addEventListener('message', handler);
                 worker.postMessage({ type: 'init', payload: topology });
             });
         });
-        
+
         const results = await Promise.all(initPromises);
         this.initialized = true;
         console.log('Worker pool initialized');
-        return results[0]; // All workers return the same features
+        return results[0]; // All workers return the same data
     }
     
     // Calculate dots using all workers in parallel

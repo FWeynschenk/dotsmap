@@ -82,6 +82,23 @@
                 </section>
 
                 <section class="group">
+                    <h2 class="group__title">Region</h2>
+                    <div class="field">
+                        <label for="regionType">Crop to</label>
+                        <select id="regionType">
+                            <option value="world">Whole world</option>
+                            <option value="hemisphere">Hemisphere</option>
+                            <option value="country">Country</option>
+                            <option value="countryNeighbours">Country + neighbours</option>
+                        </select>
+                    </div>
+                    <div class="field" id="regionChoiceWrap" style="display: none;">
+                        <label for="regionChoice">Selection</label>
+                        <select id="regionChoice"></select>
+                    </div>
+                </section>
+
+                <section class="group">
                     <h2 class="group__title">Colors</h2>
                     <div class="field">
                         <label for="colorScheme">Scheme</label>
