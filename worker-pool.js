@@ -115,63 +115,22 @@ class WorkerPool {
         });
         
         const results = await Promise.all(chunkPromises);
-        
-        // Check adjacent chunks for overlap at boundaries
-        let duplicatesRemoved = 0;
-        
-        for (let i = 0; i < results.length - 1; i++) {
-            const currentChunk = results[i];
-            const nextChunk = results[i + 1];
-            
-            if (currentChunk.length === 0 || nextChunk.length === 0) continue;
-            
-            // Find the rightmost x coordinate in current chunk
-            const currentMaxX = Math.max(...currentChunk.map(d => d.x));
-            
-            // Find the leftmost x coordinate in next chunk
-            const nextMinX = Math.min(...nextChunk.map(d => d.x));
-            
-            // If they're the same or overlap (within spacing tolerance)
-            if (Math.abs(currentMaxX - nextMinX) < spacing) {
-                // Remove all dots from next chunk that have x === nextMinX
-                const beforeLength = nextChunk.length;
-                results[i + 1] = nextChunk.filter(d => Math.round(d.x) !== Math.round(nextMinX));
-                duplicatesRemoved += beforeLength - results[i + 1].length;
-            }
-        }
-        
-        // Combine all results
-        let allDots = results.flat();
-        
-        // Final pass: remove any remaining duplicates using coordinate map
-        // (catches edge cases like dots at same Y in different chunks)
-        const dotMap = new Map();
-        const beforeFinal = allDots.length;
-        
-        for (const dot of allDots) {
-            // Create unique key based on x,y coordinates (rounded to avoid floating point issues)
-            const key = `${Math.round(dot.x)},${Math.round(dot.y)}`;
-            
-            if (!dotMap.has(key)) {
-                dotMap.set(key, dot);
-            }
-        }
-        
-        allDots = Array.from(dotMap.values());
-        duplicatesRemoved += beforeFinal - allDots.length;
-        
-        if (duplicatesRemoved > 0) {
-            console.log(`[INFO] Removed ${duplicatesRemoved} duplicate dots at chunk boundaries`);
-        }
-        
-        console.log(`Processed ${allDots.length} unique dots using parallel workers`);
-        
+
+        // Chunk boundaries are aligned to the spacing grid and chained via
+        // lastEndX, and each chunk iterates x < endX (half-open), so chunks are
+        // contiguous and non-overlapping by construction — no dedup needed.
+        // (The old spread-based dedup also overflowed the stack at tiny spacing,
+        // where a single chunk can hold hundreds of thousands of dots.)
+        const allDots = results.flat();
+
+        console.log(`Processed ${allDots.length} dots using parallel workers`);
+
         return {
             dots: allDots,
-            debugInfo: { 
+            debugInfo: {
                 totalChecks: allDots.length,
                 parallelWorkers: chunks.length,
-                duplicatesRemoved: duplicatesRemoved
+                duplicatesRemoved: 0
             }
         };
     }
