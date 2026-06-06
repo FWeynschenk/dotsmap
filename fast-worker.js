@@ -142,7 +142,10 @@ function isValidCoordinate(coordinates) {
 }
 
 function setupProjection(projectionName, width, height) {
-    const projection = d3[projectionName]();
+    // Fall back gracefully if a projection name isn't available, rather than
+    // throwing (must mirror setupProjection in index.js).
+    const factory = typeof d3[projectionName] === "function" ? d3[projectionName] : d3.geoEquirectangular;
+    const projection = factory();
 
     // Configure projection parameters BEFORE fitSize so the fit (scale +
     // translate) is computed for the final center/parallels/clip.

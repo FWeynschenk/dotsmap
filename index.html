@@ -28,22 +28,55 @@
                     <h2 class="group__title">Projection</h2>
                     <div class="field">
                         <select id="projection" aria-label="Map projection">
-                            <option value="geoEquirectangular">Equirectangular</option>
-                            <option value="geoInterruptedBoggs">Interrupted Boggs</option>
-                            <option value="geoInterruptedSinusoidal">Interrupted Sinusoidal</option>
-                            <option value="geoBerghaus">Berghaus Star</option>
-                            <option value="geoEqualEarth">Equal Earth</option>
-                            <option value="geoMercator">Mercator</option>
-                            <option value="geoNaturalEarth1">Natural Earth</option>
-                            <option value="geoAzimuthalEqualArea">Azimuthal Equal Area</option>
-                            <option value="geoAzimuthalEquidistant">Azimuthal Equidistant</option>
-                            <option value="geoGnomonic">Gnomonic</option>
-                            <option value="geoOrthographic">Orthographic</option>
-                            <option value="geoStereographic">Stereographic</option>
-                            <option value="geoAlbers">Albers</option>
-                            <option value="geoConicEqualArea">Conic Equal Area</option>
-                            <option value="geoConicEquidistant">Conic Equidistant</option>
-                            <option value="geoTransverseMercator">Transverse Mercator</option>
+                            <optgroup label="Cylindrical">
+                                <option value="geoEquirectangular">Equirectangular</option>
+                                <option value="geoMercator">Mercator</option>
+                                <option value="geoTransverseMercator">Transverse Mercator</option>
+                                <option value="geoMiller">Miller</option>
+                                <option value="geoCylindricalEqualArea">Cylindrical Equal Area</option>
+                            </optgroup>
+                            <optgroup label="Pseudocylindrical">
+                                <option value="geoEqualEarth">Equal Earth</option>
+                                <option value="geoNaturalEarth1">Natural Earth</option>
+                                <option value="geoNaturalEarth2">Natural Earth II</option>
+                                <option value="geoRobinson">Robinson</option>
+                                <option value="geoMollweide">Mollweide</option>
+                                <option value="geoSinusoidal">Sinusoidal</option>
+                                <option value="geoEckert4">Eckert IV</option>
+                                <option value="geoEckert6">Eckert VI</option>
+                                <option value="geoWagner6">Wagner VI</option>
+                                <option value="geoKavrayskiy7">Kavrayskiy VII</option>
+                                <option value="geoPatterson">Patterson</option>
+                                <option value="geoBoggs">Boggs Eumorphic</option>
+                            </optgroup>
+                            <optgroup label="Compromise">
+                                <option value="geoWinkel3">Winkel Tripel</option>
+                                <option value="geoAitoff">Aitoff</option>
+                                <option value="geoHammer">Hammer</option>
+                                <option value="geoVanDerGrinten">Van der Grinten</option>
+                                <option value="geoVanDerGrinten4">Van der Grinten IV</option>
+                            </optgroup>
+                            <optgroup label="Conic">
+                                <option value="geoAlbers">Albers</option>
+                                <option value="geoConicEqualArea">Conic Equal Area</option>
+                                <option value="geoConicEquidistant">Conic Equidistant</option>
+                                <option value="geoBonne">Bonne</option>
+                                <option value="geoPolyconic">Polyconic</option>
+                            </optgroup>
+                            <optgroup label="Azimuthal">
+                                <option value="geoOrthographic">Orthographic</option>
+                                <option value="geoStereographic">Stereographic</option>
+                                <option value="geoGnomonic">Gnomonic</option>
+                                <option value="geoAzimuthalEqualArea">Azimuthal Equal Area</option>
+                                <option value="geoAzimuthalEquidistant">Azimuthal Equidistant</option>
+                            </optgroup>
+                            <optgroup label="Interrupted">
+                                <option value="geoInterruptedHomolosine">Goode Homolosine</option>
+                                <option value="geoInterruptedMollweide">Interrupted Mollweide</option>
+                                <option value="geoInterruptedBoggs">Interrupted Boggs</option>
+                                <option value="geoInterruptedSinusoidal">Interrupted Sinusoidal</option>
+                                <option value="geoBerghaus">Berghaus Star</option>
+                            </optgroup>
                         </select>
                     </div>
                 </section>

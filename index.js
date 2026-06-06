@@ -149,7 +149,13 @@ function getProjectionOutline() {
 }
 
 function setupProjection(projectionName, width, height) {
-    currentProjection = d3[projectionName]();
+    // Fall back gracefully if a projection name isn't available in this build of
+    // d3 / d3-geo-projection, rather than throwing.
+    const factory = typeof d3[projectionName] === "function" ? d3[projectionName] : d3.geoEquirectangular;
+    if (factory === d3.geoEquirectangular && projectionName !== "geoEquirectangular") {
+        console.warn(`Projection "${projectionName}" unavailable; using Equirectangular.`);
+    }
+    currentProjection = factory();
 
     // Configure projection parameters BEFORE fitSize so the fit (scale +
     // translate) is computed for the final center/parallels/clip. This must
