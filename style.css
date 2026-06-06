@@ -268,35 +268,35 @@ button {
     font-family: inherit;
 }
 
-#updateButton {
-    background-color: var(--primary);
-    color: white;
-}
-#updateButton:hover:not(:disabled) { 
-    background-color: var(--primary-hover); 
-    transform: translateY(-1px);
-}
-
-#buildLookupMap {
+.button-group button {
     background-color: rgba(77, 171, 247, 0.1);
     color: var(--primary);
     border: 1px solid rgba(77, 171, 247, 0.2);
 }
-#buildLookupMap:hover:not(:disabled) { 
+.button-group button:hover:not(:disabled) {
     background-color: rgba(77, 171, 247, 0.2);
     border-color: var(--primary);
 }
 
-#clearCache {
-    background-color: transparent;
-    color: var(--text-main);
-    border: 1px solid var(--border);
-    font-size: 0.85rem;
+/* Rainbow seed control: number field + randomize button on one row */
+.seed-row {
+    display: flex;
+    gap: 0.5rem;
 }
-#clearCache:hover:not(:disabled) { 
-    border-color: var(--text-main); 
+.seed-row input[type="number"] {
+    flex: 1;
+}
+#randomizeSeed {
+    flex-shrink: 0;
+    padding: 0 0.85rem;
+    background-color: var(--input-bg);
+    border: 1px solid var(--border);
     color: var(--text-bright);
-    background-color: rgba(255,255,255,0.05);
+    font-size: 1.1rem;
+}
+#randomizeSeed:hover:not(:disabled) {
+    border-color: var(--primary);
+    background-color: rgba(77, 171, 247, 0.1);
 }
 
 button:disabled {

@@ -61,6 +61,14 @@
                             <label for="baseColor">Base Color</label>
                             <input type="color" id="baseColor" value="#4444ff">
                         </div>
+
+                        <div class="control-group" id="rainbowControls">
+                            <label for="rainbowSeed">Rainbow Seed</label>
+                            <div class="seed-row">
+                                <input type="number" id="rainbowSeed" value="1" min="0" step="1">
+                                <button id="randomizeSeed" type="button" title="Randomize seed">🎲</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -151,15 +159,6 @@
                     </div>
                 </div>
 
-                <div class="button-group">
-                    <button id="updateButton">
-                        Update Map
-                    </button>
-                    <button id="clearCache">
-                        Clear Cache
-                    </button>
-                </div>
-                
                 <div class="control-section">
                     <div class="section-title collapsible-header" data-section="export">
                         <span>Export</span>

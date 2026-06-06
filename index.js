@@ -28,6 +28,29 @@ let debugInfo = { totalChecks: 0, circleChecks: 0, fullChecks: 0, gridChecks: 0 
 // Enhanced Worker Pool and Cache
 let workerPool = null;
 let isCalculating = false;
+let pendingUpdate = false; // a settings change arrived mid-calculation
+let updateTimer = null;    // debounce handle for auto-update
+
+// Settings now drive the map directly (no manual "Update" button). Debounce so
+// dragging a number field or color picker coalesces into a single render.
+function scheduleUpdate() {
+    clearTimeout(updateTimer);
+    updateTimer = setTimeout(() => updateMap(), 120);
+}
+
+// Single place to drive the status pill that used to live on the button.
+function setStatus(text, isError = false) {
+    const el = document.getElementById("progressIndicator");
+    if (!el) return;
+    if (!text) {
+        el.style.display = "none";
+        el.style.backgroundColor = "";
+        return;
+    }
+    el.style.display = "block";
+    el.textContent = text;
+    el.style.backgroundColor = isError ? "#ffebee" : "";
+}
 
 // Lightweight in-memory cache so repeat clicks with identical settings are
 // instant. No persistence — recomputing is cheap, and a fresh worker session
@@ -47,15 +70,30 @@ const colorScales = [
     d3.interpolatePlasma
 ];
 
+// Small, fast seeded PRNG. Same seed -> same color assignment, so the rainbow
+// scheme is deterministic while the seed still lets the user explore variations.
+function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function() {
+        a = (a + 0x6D2B79F5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
 function generateCountryColors(countries) {
     const scheme = document.getElementById("colorScheme").value;
     const baseColor = document.getElementById("baseColor").value;
-    return generateColorScheme(countries, scheme, baseColor);
+    const seedInput = document.getElementById("rainbowSeed");
+    const seed = seedInput ? (parseInt(seedInput.value) || 0) : 0;
+    return generateColorScheme(countries, scheme, baseColor, seed);
 }
 
-function generateColorScheme(countries, schemeName, baseColor) {
+function generateColorScheme(countries, schemeName, baseColor, seed = 0) {
     const colors = new Map();
-    
+    const rand = mulberry32(seed);
+
     switch (schemeName) {
         case 'rainbow':
             // Generate all colors first
@@ -64,26 +102,26 @@ function generateColorScheme(countries, schemeName, baseColor) {
                 const scaleIndex = Math.floor(i / (countries.length / colorScales.length));
                 const scale = colorScales[scaleIndex];
                 const basePosition = (i % (countries.length / colorScales.length)) / (countries.length / colorScales.length);
-                const variation = (Math.random() - 0.5) * 0.1;
+                const variation = (rand() - 0.5) * 0.1;
                 rainbowColors.push(scale(basePosition + variation));
             }
-            
+
             // Shuffle the colors array using Fisher-Yates algorithm
             for (let i = rainbowColors.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
+                const j = Math.floor(rand() * (i + 1));
                 [rainbowColors[i], rainbowColors[j]] = [rainbowColors[j], rainbowColors[i]];
             }
-            
+
             // Assign shuffled colors to countries
             countries.forEach((country, i) => {
                 colors.set(country.properties.name, rainbowColors[i]);
             });
             break;
-            
+
         case 'greyscale':
             countries.forEach((country, i) => {
                 const value = 0.2 + (0.6 * i / countries.length);
-                const variation = (Math.random() - 0.5) * 0.1;
+                const variation = (rand() - 0.5) * 0.1;
                 const adjustedValue = Math.max(0.1, Math.min(0.9, value + variation));
                 colors.set(country.properties.name, `rgb(${Math.floor(adjustedValue * 255)},${Math.floor(adjustedValue * 255)},${Math.floor(adjustedValue * 255)})`);
             });
@@ -311,12 +349,14 @@ function updateMap() {
 
 async function calculateDotsOptimized(params) {
     if (isCalculating) {
-        console.log("Already calculating, skipping...");
+        // A newer set of settings arrived while we were busy; re-run once done
+        // so the rendered dots always reflect the latest controls.
+        pendingUpdate = true;
         return;
     }
-    
+
     const { width, height, projectionName, spacing, showOceanDots, dotSize, enableHover } = params;
-    
+
     // Check cache first
     const cached = dotCache.get(dotCacheKey(params));
     if (cached) {
@@ -325,62 +365,44 @@ async function calculateDotsOptimized(params) {
         showPerformanceInfo("Instant (cached)", cached.dots.length);
         return;
     }
-    
+
     // Not in cache, calculate using worker pool
     isCalculating = true;
-    const updateButton = document.getElementById("updateButton");
-    const progressIndicator = document.getElementById("progressIndicator");
-    
-    updateButton.textContent = "Calculating...";
-    updateButton.disabled = true;
-    if (progressIndicator) {
-        progressIndicator.style.display = "block";
-        progressIndicator.textContent = "Initializing parallel workers...";
-    }
-    
+    setStatus("Rendering map…");
+
     try {
         const startTime = performance.now();
-        
+
         // Use parallel workers
         const result = await workerPool.calculateDotsParallel(params, (progress) => {
-            updateButton.textContent = `Calculating... ${progress}%`;
-            if (progressIndicator) {
-                progressIndicator.textContent = `Processing chunks: ${progress}% complete`;
-            }
+            setStatus(`Rendering map… ${progress}%`);
         });
-        
+
         const endTime = performance.now();
         const calculationTime = (endTime - startTime).toFixed(0);
         console.log(`[OK] Calculation took ${calculationTime}ms using ${result.debugInfo.parallelWorkers || 'multiple'} workers`);
-        
+
         debugInfo = result.debugInfo;
-        
+
         // Cache the result (simple LRU: drop the oldest entry past the limit)
         dotCache.set(dotCacheKey(params), result);
         if (dotCache.size > DOT_CACHE_LIMIT) {
             dotCache.delete(dotCache.keys().next().value);
         }
-        
+
         // Draw
         drawDots(result.dots, dotSize, enableHover, showOceanDots);
         showPerformanceInfo(`${calculationTime}ms (${result.debugInfo.parallelWorkers || 'multi'} workers)`, result.dots.length);
-        
-        updateButton.textContent = "Update Map";
+
+        setStatus(null);
     } catch (error) {
         console.error("Calculation error:", error);
-        updateButton.textContent = "Error - Try Again";
-        if (progressIndicator) {
-            progressIndicator.textContent = "Error occurred during calculation";
-            progressIndicator.style.backgroundColor = "#ffebee";
-        }
+        setStatus("Error during render", true);
     } finally {
-        updateButton.disabled = false;
         isCalculating = false;
-        if (progressIndicator) {
-            setTimeout(() => {
-                progressIndicator.style.display = "none";
-                progressIndicator.style.backgroundColor = "#e3f2fd";
-            }, 2000);
+        if (pendingUpdate) {
+            pendingUpdate = false;
+            updateMap();
         }
     }
 }
@@ -434,45 +456,69 @@ async function loadPrerenderedSVG() {
     }
 }
 
+// Show/hide the scheme-specific controls (base color for monotone, seed for
+// rainbow) based on the active color scheme.
+function updateColorControlsVisibility() {
+    const scheme = document.getElementById("colorScheme").value;
+    const monotone = document.getElementById("monotoneControls");
+    const rainbow = document.getElementById("rainbowControls");
+    if (monotone) monotone.style.display = scheme === "monotone" ? "flex" : "none";
+    if (rainbow) rainbow.style.display = scheme === "rainbow" ? "flex" : "none";
+}
+
+// Wire every setting so changing it re-renders automatically.
+function setupAutoUpdate() {
+    // Numbers/colors fire on commit (blur/enter/picker close) rather than per
+    // keystroke; selects and checkboxes fire on change.
+    const autoUpdateIds = [
+        "projection", "renderWidth", "renderHeight", "spacing", "dotSize",
+        "baseColor", "rainbowSeed", "showDots", "showOceanDots", "showCountries",
+        "showOcean", "showOutline", "showGraticules", "enableHover"
+    ];
+    autoUpdateIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener("change", scheduleUpdate);
+    });
+
+    const colorScheme = document.getElementById("colorScheme");
+    if (colorScheme) {
+        colorScheme.addEventListener("change", function() {
+            updateColorControlsVisibility();
+            scheduleUpdate();
+        });
+    }
+
+    const randomizeSeed = document.getElementById("randomizeSeed");
+    if (randomizeSeed) {
+        randomizeSeed.addEventListener("click", function() {
+            document.getElementById("rainbowSeed").value = Math.floor(Math.random() * 100000);
+            scheduleUpdate();
+        });
+    }
+}
+
 async function initializeApplication() {
     try {
-        // Show loading message
-        const updateButton = document.getElementById("updateButton");
-        updateButton.textContent = "Loading...";
-        updateButton.disabled = true;
-        
+        setStatus("Loading…");
+
         // Load prerendered SVG for initial display
         await loadPrerenderedSVG();
-        
+
         // Load world data
         const topology = await d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json");
 
         // Initialize worker pool
         const numWorkers = Math.min(navigator.hardwareConcurrency || 4, 6);
         workerPool = new WorkerPool(numWorkers);
-        
+
         // Initialize workers with world data
         world.features = await workerPool.init(topology);
         console.log("Workers initialized with world data");
-        
-        // Setup event listeners
-        document.getElementById("updateButton").addEventListener("click", updateMap);
-        
-        document.getElementById("colorScheme").addEventListener("change", function() {
-            const isMonotone = this.value === "monotone";
-            document.getElementById("monotoneControls").style.display = isMonotone ? "flex" : "none";
-            updateMap();
-        });
-        
-        // Add button to clear cache
-        const clearCacheButton = document.getElementById("clearCache");
-        if (clearCacheButton) {
-            clearCacheButton.addEventListener("click", function() {
-                dotCache.clear();
-                alert("Cache cleared!");
-            });
-        }
-        
+
+        // Settings now drive the map automatically
+        updateColorControlsVisibility();
+        setupAutoUpdate();
+
         // Add download SVG button
         const downloadSvgButton = document.getElementById("downloadSvg");
         if (downloadSvgButton) {
@@ -480,7 +526,7 @@ async function initializeApplication() {
                 downloadAsSVG();
             });
         }
-        
+
         // Add download PNG button
         const downloadPngButton = document.getElementById("downloadPng");
         if (downloadPngButton) {
@@ -488,15 +534,14 @@ async function initializeApplication() {
                 downloadAsPNG();
             });
         }
-        
-        updateButton.textContent = "Update Map";
-        updateButton.disabled = false;
-        
+
         console.log("Application initialized successfully");
+
+        // Render once now that everything is ready, replacing the prerendered SVG.
+        updateMap();
     } catch (error) {
         console.error("Failed to initialize application:", error);
-        const updateButton = document.getElementById("updateButton");
-        updateButton.textContent = "Error - Reload Page";
+        setStatus("Error — reload page", true);
     }
 }
 
