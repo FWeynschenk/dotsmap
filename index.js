@@ -180,12 +180,6 @@ function setupProjection(projectionName, width, height) {
 
 const OCEAN_DOT_COLOR = "#99ccff";
 
-// Build the SVG path data for one filled circle of radius r centered at (x, y),
-// expressed as two half-arcs.
-function circleSubpath(x, y, r) {
-    return `M${x - r},${y}a${r},${r} 0 1,0 ${r * 2},0a${r},${r} 0 1,0 ${-r * 2},0`;
-}
-
 function drawDots(dotsData, dotSize, enableHover, showOceanDots) {
     const svg = d3.select("#map");
     const mainGroup = svg.select("g"); // Assume main group exists
@@ -198,29 +192,57 @@ function drawDots(dotsData, dotSize, enableHover, showOceanDots) {
 
     const dotsGroup = mainGroup.append("g").attr("class", "dots-group");
 
-    // Performance: emit ONE <path> per fill color (≤ number of countries) rather
-    // than one <circle> per dot. This collapses tens/hundreds of thousands of
-    // DOM nodes down to a couple hundred, which is what the browser struggles
-    // with. A single union fill also avoids double-blending where dots overlap.
-    const segmentsByColor = new Map();
+    // Performance: rasterize all dots to a canvas at render resolution and embed
+    // the result as a SINGLE <image>. The browser then paints one image no matter
+    // how many dots there are, which is what makes massive dot counts smooth.
+    // (Hit-testing/hover is handled separately via the quadtree below.)
+    const { width, height } = getRenderDimensions();
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+
+    // Group by color so we issue one fillStyle + one fill() per color (≤ number
+    // of countries) instead of per dot. Dots are drawn opaque here; the 0.8
+    // translucency is applied once to the whole <image>, which also avoids any
+    // double-blending where dots overlap.
+    const dotsByColor = new Map();
     for (const d of dotsData) {
         const color = d.countryName
             ? (countryColors.get(d.countryName) || OCEAN_DOT_COLOR)
             : OCEAN_DOT_COLOR;
-        let segs = segmentsByColor.get(color);
-        if (!segs) { segs = []; segmentsByColor.set(color, segs); }
-        segs.push(circleSubpath(d.x, d.y, dotSize));
+        let arr = dotsByColor.get(color);
+        if (!arr) { arr = []; dotsByColor.set(color, arr); }
+        arr.push(d);
     }
 
-    segmentsByColor.forEach((segs, color) => {
-        dotsGroup.append("path")
-            .attr("d", segs.join(""))
-            .attr("fill", color)
-            .attr("opacity", 0.8)
-            // Hover is handled by a single SVG-level handler + quadtree, so the
-            // dot paths don't need to participate in hit-testing.
-            .attr("pointer-events", "none");
+    const TWO_PI = Math.PI * 2;
+    dotsByColor.forEach((dots, color) => {
+        ctx.beginPath();
+        for (const d of dots) {
+            // moveTo before each arc so consecutive arcs aren't joined by a line.
+            ctx.moveTo(d.x + dotSize, d.y);
+            ctx.arc(d.x, d.y, dotSize, 0, TWO_PI);
+        }
+        ctx.fillStyle = color;
+        ctx.fill();
     });
+
+    // Data URL (not a blob URL) so the embedded raster travels with the SVG when
+    // it's serialized for download.
+    const dataUrl = canvas.toDataURL("image/png");
+
+    dotsGroup.append("image")
+        .attr("href", dataUrl)
+        .attr("xlink:href", dataUrl) // compatibility for SVG-as-<img> PNG export
+        .attr("x", 0)
+        .attr("y", 0)
+        .attr("width", width)
+        .attr("height", height)
+        .attr("preserveAspectRatio", "none")
+        .attr("opacity", 0.8)
+        .attr("pointer-events", "none");
 
     if (enableHover) {
         setupDotHover(svg, dotsGroup, dotsData, dotSize);
