@@ -6,8 +6,7 @@ class WorkerPool {
         this.availableWorkers = [];
         this.taskQueue = [];
         this.initialized = false;
-        this.lookupMapBuilt = false;
-        
+
         console.log(`Initializing worker pool with ${this.numWorkers} workers`);
         
         // Create workers
@@ -19,68 +18,25 @@ class WorkerPool {
         }
     }
     
-    // Initialize all workers with world data
+    // Initialize all workers with world data. Returns { features, neighbors }.
     async init(topology) {
         const initPromises = this.workers.map(worker => {
             return new Promise((resolve) => {
                 const handler = (e) => {
                     if (e.data.type === 'features') {
                         worker.removeEventListener('message', handler);
-                        resolve(e.data.features);
+                        resolve({ features: e.data.features, neighbors: e.data.neighbors });
                     }
                 };
                 worker.addEventListener('message', handler);
                 worker.postMessage({ type: 'init', payload: topology });
             });
         });
-        
+
         const results = await Promise.all(initPromises);
         this.initialized = true;
         console.log('Worker pool initialized');
-        return results[0]; // All workers return the same features
-    }
-    
-    // Build lookup map on one worker for ultra-fast queries
-    async buildLookupMap(params, onProgress) {
-        if (this.lookupMapBuilt) return;
-        
-        const worker = this.workers[0]; // Use first worker
-        
-        return new Promise((resolve, reject) => {
-            const handler = (e) => {
-                if (e.data.type === 'lookupProgress') {
-                    if (onProgress) onProgress(e.data.progress);
-                } else if (e.data.type === 'lookupComplete') {
-                    worker.removeEventListener('message', handler);
-                    this.lookupMapBuilt = true;
-                    
-                    // Broadcast to other workers to build their own maps
-                    const buildPromises = this.workers.slice(1).map(w => {
-                        return new Promise(res => {
-                            const h = (e) => {
-                                if (e.data.type === 'lookupComplete') {
-                                    w.removeEventListener('message', h);
-                                    res();
-                                }
-                            };
-                            w.addEventListener('message', h);
-                            w.postMessage({ type: 'buildLookupMap', payload: params });
-                        });
-                    });
-                    
-                    Promise.all(buildPromises).then(() => {
-                        console.log('All workers have lookup maps built');
-                        resolve();
-                    });
-                } else if (e.data.type === 'error') {
-                    worker.removeEventListener('message', handler);
-                    reject(new Error(e.data.error));
-                }
-            };
-            
-            worker.addEventListener('message', handler);
-            worker.postMessage({ type: 'buildLookupMap', payload: params });
-        });
+        return results[0]; // All workers return the same data
     }
     
     // Calculate dots using all workers in parallel
@@ -159,63 +115,22 @@ class WorkerPool {
         });
         
         const results = await Promise.all(chunkPromises);
-        
-        // Check adjacent chunks for overlap at boundaries
-        let duplicatesRemoved = 0;
-        
-        for (let i = 0; i < results.length - 1; i++) {
-            const currentChunk = results[i];
-            const nextChunk = results[i + 1];
-            
-            if (currentChunk.length === 0 || nextChunk.length === 0) continue;
-            
-            // Find the rightmost x coordinate in current chunk
-            const currentMaxX = Math.max(...currentChunk.map(d => d.x));
-            
-            // Find the leftmost x coordinate in next chunk
-            const nextMinX = Math.min(...nextChunk.map(d => d.x));
-            
-            // If they're the same or overlap (within spacing tolerance)
-            if (Math.abs(currentMaxX - nextMinX) < spacing) {
-                // Remove all dots from next chunk that have x === nextMinX
-                const beforeLength = nextChunk.length;
-                results[i + 1] = nextChunk.filter(d => Math.round(d.x) !== Math.round(nextMinX));
-                duplicatesRemoved += beforeLength - results[i + 1].length;
-            }
-        }
-        
-        // Combine all results
-        let allDots = results.flat();
-        
-        // Final pass: remove any remaining duplicates using coordinate map
-        // (catches edge cases like dots at same Y in different chunks)
-        const dotMap = new Map();
-        const beforeFinal = allDots.length;
-        
-        for (const dot of allDots) {
-            // Create unique key based on x,y coordinates (rounded to avoid floating point issues)
-            const key = `${Math.round(dot.x)},${Math.round(dot.y)}`;
-            
-            if (!dotMap.has(key)) {
-                dotMap.set(key, dot);
-            }
-        }
-        
-        allDots = Array.from(dotMap.values());
-        duplicatesRemoved += beforeFinal - allDots.length;
-        
-        if (duplicatesRemoved > 0) {
-            console.log(`[INFO] Removed ${duplicatesRemoved} duplicate dots at chunk boundaries`);
-        }
-        
-        console.log(`Processed ${allDots.length} unique dots using parallel workers`);
-        
+
+        // Chunk boundaries are aligned to the spacing grid and chained via
+        // lastEndX, and each chunk iterates x < endX (half-open), so chunks are
+        // contiguous and non-overlapping by construction — no dedup needed.
+        // (The old spread-based dedup also overflowed the stack at tiny spacing,
+        // where a single chunk can hold hundreds of thousands of dots.)
+        const allDots = results.flat();
+
+        console.log(`Processed ${allDots.length} dots using parallel workers`);
+
         return {
             dots: allDots,
-            debugInfo: { 
+            debugInfo: {
                 totalChecks: allDots.length,
                 parallelWorkers: chunks.length,
-                duplicatesRemoved: duplicatesRemoved
+                duplicatesRemoved: 0
             }
         };
     }
@@ -246,7 +161,6 @@ class WorkerPool {
         this.workers = [];
         this.availableWorkers = [];
         this.initialized = false;
-        this.lookupMapBuilt = false;
     }
 }
 
