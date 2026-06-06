@@ -178,77 +178,118 @@ function setupProjection(projectionName, width, height) {
 }
 
 
+const OCEAN_DOT_COLOR = "#99ccff";
+
+// Build the SVG path data for one filled circle of radius r centered at (x, y),
+// expressed as two half-arcs.
+function circleSubpath(x, y, r) {
+    return `M${x - r},${y}a${r},${r} 0 1,0 ${r * 2},0a${r},${r} 0 1,0 ${-r * 2},0`;
+}
+
 function drawDots(dotsData, dotSize, enableHover, showOceanDots) {
     const svg = d3.select("#map");
     const mainGroup = svg.select("g"); // Assume main group exists
-    
-    // Remove existing dots
+
+    // Remove existing dots and detach any previous delegated hover handlers.
     mainGroup.select(".dots-group").remove();
+    svg.on("mousemove.dots", null).on("mouseleave.dots", null);
 
     if (!dotsData || dotsData.length === 0) return;
 
     const dotsGroup = mainGroup.append("g").attr("class", "dots-group");
-    
-    // Create tooltip if not exists
+
+    // Performance: emit ONE <path> per fill color (≤ number of countries) rather
+    // than one <circle> per dot. This collapses tens/hundreds of thousands of
+    // DOM nodes down to a couple hundred, which is what the browser struggles
+    // with. A single union fill also avoids double-blending where dots overlap.
+    const segmentsByColor = new Map();
+    for (const d of dotsData) {
+        const color = d.countryName
+            ? (countryColors.get(d.countryName) || OCEAN_DOT_COLOR)
+            : OCEAN_DOT_COLOR;
+        let segs = segmentsByColor.get(color);
+        if (!segs) { segs = []; segmentsByColor.set(color, segs); }
+        segs.push(circleSubpath(d.x, d.y, dotSize));
+    }
+
+    segmentsByColor.forEach((segs, color) => {
+        dotsGroup.append("path")
+            .attr("d", segs.join(""))
+            .attr("fill", color)
+            .attr("opacity", 0.8)
+            // Hover is handled by a single SVG-level handler + quadtree, so the
+            // dot paths don't need to participate in hit-testing.
+            .attr("pointer-events", "none");
+    });
+
+    if (enableHover) {
+        setupDotHover(svg, dotsGroup, dotsData, dotSize);
+    }
+}
+
+// A single delegated mousemove handler + quadtree replaces per-dot listeners.
+function setupDotHover(svg, dotsGroup, dotsData, dotSize) {
     let tooltip = d3.select("body").select(".dot-tooltip");
     if (tooltip.empty()) {
         tooltip = d3.select("body").append("div")
             .attr("class", "dot-tooltip")
             .style("position", "absolute")
             .style("visibility", "hidden")
-            .style("background-color", "rgba(255, 255, 255, 0.9)")
-            .style("padding", "5px")
-            .style("border", "1px solid #999")
-            .style("border-radius", "4px")
             .style("pointer-events", "none")
-            .style("font-family", "sans-serif")
-            .style("font-size", "12px")
             .style("z-index", "1000");
     }
 
-    dotsGroup.selectAll("circle")
-        .data(dotsData)
-        .join("circle")
-        .attr("cx", d => d.x)
-        .attr("cy", d => d.y)
-        .attr("r", dotSize)
-        .attr("fill", d => d.countryName ? (countryColors.get(d.countryName) || "#99ccff") : "#99ccff")
-        .attr("opacity", 0.8);
+    const quadtree = d3.quadtree()
+        .x(d => d.x)
+        .y(d => d.y)
+        .addAll(dotsData);
 
-    if (enableHover) {
-        dotsGroup.selectAll("circle")
-            .on("mouseover", function(event, d) {
-                if (!d.coords) return;
-                
-                const [lon, lat] = d.coords;
-                const countryName = d.countryName || "Ocean";
-                
-                tooltip
-                    .style("visibility", "visible")
-                    .html(`
-                        Location: ${countryName}<br>
-                        Lat: ${lat.toFixed(2)}°<br>
-                        Lon: ${lon.toFixed(2)}°
-                    `);
-                
-                d3.select(this)
-                    .attr("stroke", "#000")
-                    .attr("stroke-width", "1px")
-                    .attr("opacity", 1);
-            })
-            .on("mousemove", function(event) {
-                tooltip
-                    .style("top", (event.pageY + 10) + "px")
-                    .style("left", (event.pageX + 10) + "px");
-            })
-            .on("mouseout", function() {
-                tooltip.style("visibility", "hidden");
-                d3.select(this)
-                    .attr("stroke", null)
-                    .attr("stroke-width", null)
-                    .attr("opacity", 0.8);
-            });
-    }
+    // Highlight ring that follows the hovered dot (one element, repositioned).
+    const highlight = dotsGroup.append("circle")
+        .attr("r", dotSize)
+        .attr("fill", "none")
+        .attr("stroke", "#000")
+        .attr("stroke-width", 1)
+        .style("visibility", "hidden")
+        .style("pointer-events", "none");
+
+    const searchRadius = Math.max(dotSize * 2, 6);
+
+    svg.on("mousemove.dots", function(event) {
+        // d3.pointer maps the screen event into the SVG's viewBox coordinate
+        // system (accounting for preserveAspectRatio scaling), which is the
+        // space the dots live in.
+        const [mx, my] = d3.pointer(event, dotsGroup.node());
+        const found = quadtree.find(mx, my, searchRadius);
+
+        if (!found) {
+            tooltip.style("visibility", "hidden");
+            highlight.style("visibility", "hidden");
+            return;
+        }
+
+        const countryName = found.countryName || "Ocean";
+        const coords = found.coords;
+        const coordText = coords
+            ? `<br>Lat: ${coords[1].toFixed(2)}°<br>Lon: ${coords[0].toFixed(2)}°`
+            : "";
+
+        tooltip
+            .style("visibility", "visible")
+            .style("top", (event.pageY + 10) + "px")
+            .style("left", (event.pageX + 10) + "px")
+            .html(`Location: ${countryName}${coordText}`);
+
+        highlight
+            .attr("cx", found.x)
+            .attr("cy", found.y)
+            .style("visibility", "visible");
+    });
+
+    svg.on("mouseleave.dots", function() {
+        tooltip.style("visibility", "hidden");
+        highlight.style("visibility", "hidden");
+    });
 }
 
 function updateMap() {
