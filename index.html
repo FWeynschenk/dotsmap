@@ -1,238 +1,177 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dot Map Generator</title>
-    <link rel="stylesheet" href="style.css">
-    <!-- Preload fonts for better performance -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
-    <div class="app-container">
+    <div class="app">
         <aside class="sidebar">
-            <div class="sidebar-header">
-                <div class="brand-mark" aria-hidden="true">
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                        <circle cx="3" cy="3" r="1.4"/><circle cx="8" cy="3" r="1.4"/><circle cx="13" cy="3" r="1.4"/>
-                        <circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/>
-                        <circle cx="3" cy="13" r="1.4"/><circle cx="8" cy="13" r="1.4"/><circle cx="13" cy="13" r="1.4"/>
+            <header class="brand">
+                <div class="brand__mark" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor">
+                        <circle cx="3" cy="3" r="1.5"/><circle cx="8" cy="3" r="1.5"/><circle cx="13" cy="3" r="1.5"/>
+                        <circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/>
+                        <circle cx="3" cy="13" r="1.5"/><circle cx="8" cy="13" r="1.5"/><circle cx="13" cy="13" r="1.5"/>
                     </svg>
                 </div>
-                <div class="brand-text">
+                <div class="brand__text">
                     <h1>Dot Map Gen</h1>
-                    <p>Generate stippled world maps</p>
+                    <p>Stippled world maps</p>
                 </div>
-            </div>
+            </header>
 
-            <div class="controls-wrapper">
-                <!-- PROJECTION -->
-                <section class="control-section">
-                    <button class="section-title collapsible-header" data-section="projection" type="button">
-                        <span>Projection</span>
-                        <svg class="collapse-icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-                            <path d="M2 4 L6 8 L10 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                    </button>
-
-                    <div class="collapsible-content" data-content="projection">
-                        <div class="control-group">
-                            <label for="projection">Map projection</label>
-                            <select id="projection">
-                                <option value="geoEquirectangular">Equirectangular</option>
-                                <option value="geoInterruptedBoggs">Interrupted Boggs</option>
-                                <option value="geoInterruptedSinusoidal">Interrupted Sinusoidal</option>
-                                <option value="geoBerghaus">Berghaus Star</option>
-                                <option value="geoEqualEarth">Equal Earth</option>
-                                <option value="geoMercator">Mercator</option>
-                                <option value="geoNaturalEarth1">Natural Earth</option>
-                                <option value="geoAzimuthalEqualArea">Azimuthal Equal Area</option>
-                                <option value="geoAzimuthalEquidistant">Azimuthal Equidistant</option>
-                                <option value="geoGnomonic">Gnomonic</option>
-                                <option value="geoOrthographic">Orthographic</option>
-                                <option value="geoStereographic">Stereographic</option>
-                                <option value="geoAlbers">Albers</option>
-                                <option value="geoConicEqualArea">Conic Equal Area</option>
-                                <option value="geoConicEquidistant">Conic Equidistant</option>
-                                <option value="geoTransverseMercator">Transverse Mercator</option>
-                            </select>
-                        </div>
+            <div class="sidebar__body">
+                <section class="group">
+                    <h2 class="group__title">Projection</h2>
+                    <div class="field">
+                        <select id="projection" aria-label="Map projection">
+                            <option value="geoEquirectangular">Equirectangular</option>
+                            <option value="geoInterruptedBoggs">Interrupted Boggs</option>
+                            <option value="geoInterruptedSinusoidal">Interrupted Sinusoidal</option>
+                            <option value="geoBerghaus">Berghaus Star</option>
+                            <option value="geoEqualEarth">Equal Earth</option>
+                            <option value="geoMercator">Mercator</option>
+                            <option value="geoNaturalEarth1">Natural Earth</option>
+                            <option value="geoAzimuthalEqualArea">Azimuthal Equal Area</option>
+                            <option value="geoAzimuthalEquidistant">Azimuthal Equidistant</option>
+                            <option value="geoGnomonic">Gnomonic</option>
+                            <option value="geoOrthographic">Orthographic</option>
+                            <option value="geoStereographic">Stereographic</option>
+                            <option value="geoAlbers">Albers</option>
+                            <option value="geoConicEqualArea">Conic Equal Area</option>
+                            <option value="geoConicEquidistant">Conic Equidistant</option>
+                            <option value="geoTransverseMercator">Transverse Mercator</option>
+                        </select>
                     </div>
                 </section>
 
-                <!-- COLORS -->
-                <section class="control-section">
-                    <button class="section-title collapsible-header" data-section="colors" type="button">
-                        <span>Colors</span>
-                        <svg class="collapse-icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-                            <path d="M2 4 L6 8 L10 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                    </button>
-
-                    <div class="collapsible-content" data-content="colors">
-                        <div class="control-group">
-                            <label for="colorScheme">Color scheme</label>
-                            <select id="colorScheme">
-                                <option value="rainbow">Rainbow</option>
-                                <option value="greyscale">Greyscale</option>
-                                <option value="monotone">Monotone</option>
-                            </select>
+                <section class="group">
+                    <h2 class="group__title">Colors</h2>
+                    <div class="field">
+                        <label for="colorScheme">Scheme</label>
+                        <select id="colorScheme">
+                            <option value="rainbow">Rainbow</option>
+                            <option value="greyscale">Greyscale</option>
+                            <option value="monotone">Monotone</option>
+                        </select>
+                    </div>
+                    <div class="field" id="monotoneControls" style="display: none;">
+                        <label for="baseColor">Base color</label>
+                        <input type="color" id="baseColor" value="#4444ff">
+                    </div>
+                    <div class="field" id="rainbowControls">
+                        <label for="rainbowSeed">Seed</label>
+                        <div class="seed">
+                            <input type="number" id="rainbowSeed" value="1" min="0" step="1">
+                            <button id="randomizeSeed" class="icon-btn" type="button" title="Randomize seed" aria-label="Randomize seed">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/>
+                                    <path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/>
+                                </svg>
+                            </button>
                         </div>
-
-                        <div class="control-group" id="monotoneControls" style="display: none;">
-                            <label for="baseColor">Base color</label>
-                            <input type="color" id="baseColor" value="#4444ff">
-                        </div>
-
-                        <div class="control-group" id="rainbowControls">
-                            <label for="rainbowSeed">Rainbow seed</label>
-                            <div class="seed-row">
-                                <input type="number" id="rainbowSeed" value="1" min="0" step="1">
-                                <button id="randomizeSeed" type="button" title="Randomize seed">🎲</button>
-                            </div>
-                            <p class="control-hint">Same seed → same colors. Reroll for a new palette.</p>
-                        </div>
+                        <p class="hint">Same seed → same palette. Reroll for a new one.</p>
                     </div>
                 </section>
 
-                <!-- DOTS -->
-                <section class="control-section">
-                    <button class="section-title collapsible-header" data-section="dots" type="button">
-                        <span>Dots</span>
-                        <svg class="collapse-icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-                            <path d="M2 4 L6 8 L10 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                    </button>
-
-                    <div class="collapsible-content" data-content="dots">
-                        <div class="control-row">
-                            <div class="control-group">
-                                <label for="spacing">Spacing</label>
-                                <input type="number" id="spacing" value="10" min="1" max="50">
-                            </div>
-                            <div class="control-group">
-                                <label for="dotSize">Dot size</label>
-                                <input type="number" id="dotSize" value="3" min="1" max="10">
-                            </div>
+                <section class="group">
+                    <h2 class="group__title">Dots</h2>
+                    <div class="grid-2">
+                        <div class="field">
+                            <label for="spacing">Spacing</label>
+                            <input type="number" id="spacing" value="10" min="1" max="50">
                         </div>
-                        <p class="control-hint">Lower spacing = more dots (and slower).</p>
-
-                        <div class="toggle-grid">
-                            <label class="checkbox-wrapper">
-                                <input type="checkbox" id="showDots" checked>
-                                <span>Land dots</span>
-                            </label>
-                            <label class="checkbox-wrapper">
-                                <input type="checkbox" id="showOceanDots">
-                                <span>Ocean dots</span>
-                            </label>
+                        <div class="field">
+                            <label for="dotSize">Dot size</label>
+                            <input type="number" id="dotSize" value="3" min="1" max="10">
                         </div>
+                    </div>
+                    <p class="hint">Lower spacing = more dots (and slower).</p>
+                    <div class="toggles">
+                        <label class="toggle">
+                            <input type="checkbox" id="showDots" checked>
+                            <span class="toggle__box"></span>
+                            <span class="toggle__label">Land dots</span>
+                        </label>
+                        <label class="toggle">
+                            <input type="checkbox" id="showOceanDots">
+                            <span class="toggle__box"></span>
+                            <span class="toggle__label">Ocean dots</span>
+                        </label>
                     </div>
                 </section>
 
-                <!-- LAYERS -->
-                <section class="control-section">
-                    <button class="section-title collapsible-header" data-section="layers" type="button">
-                        <span>Layers</span>
-                        <svg class="collapse-icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-                            <path d="M2 4 L6 8 L10 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                    </button>
-
-                    <div class="collapsible-content" data-content="layers">
-                        <div class="toggle-grid">
-                            <label class="checkbox-wrapper">
-                                <input type="checkbox" id="showCountries">
-                                <span>Land shape</span>
-                            </label>
-                            <label class="checkbox-wrapper">
-                                <input type="checkbox" id="showOcean">
-                                <span>Ocean fill</span>
-                            </label>
-                            <label class="checkbox-wrapper">
-                                <input type="checkbox" id="showOutline" checked>
-                                <span>Outline</span>
-                            </label>
-                            <label class="checkbox-wrapper">
-                                <input type="checkbox" id="showGraticules">
-                                <span>Grid lines</span>
-                            </label>
-                        </div>
+                <section class="group">
+                    <h2 class="group__title">Layers</h2>
+                    <div class="toggles">
+                        <label class="toggle">
+                            <input type="checkbox" id="showCountries">
+                            <span class="toggle__box"></span>
+                            <span class="toggle__label">Land shape</span>
+                        </label>
+                        <label class="toggle">
+                            <input type="checkbox" id="showOcean">
+                            <span class="toggle__box"></span>
+                            <span class="toggle__label">Ocean fill</span>
+                        </label>
+                        <label class="toggle">
+                            <input type="checkbox" id="showOutline" checked>
+                            <span class="toggle__box"></span>
+                            <span class="toggle__label">Outline</span>
+                        </label>
+                        <label class="toggle">
+                            <input type="checkbox" id="showGraticules">
+                            <span class="toggle__box"></span>
+                            <span class="toggle__label">Grid lines</span>
+                        </label>
                     </div>
                 </section>
 
-                <!-- RENDER SIZE -->
-                <section class="control-section">
-                    <button class="section-title collapsible-header collapsed" data-section="rendersize" type="button">
-                        <span>Render size</span>
-                        <svg class="collapse-icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-                            <path d="M2 4 L6 8 L10 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                    </button>
-
-                    <div class="collapsible-content collapsed" data-content="rendersize">
-                        <div class="control-row">
-                            <div class="control-group">
-                                <label for="renderWidth">Width</label>
-                                <input type="number" id="renderWidth" value="1920" min="800" max="7680" step="10">
-                            </div>
-                            <div class="control-group">
-                                <label for="renderHeight">Height</label>
-                                <input type="number" id="renderHeight" value="1080" min="600" max="4320" step="10">
-                            </div>
+                <section class="group">
+                    <h2 class="group__title">Render size</h2>
+                    <div class="grid-2">
+                        <div class="field">
+                            <label for="renderWidth">Width</label>
+                            <input type="number" id="renderWidth" value="1920" min="800" max="7680" step="10">
                         </div>
-                        <p class="control-hint">Output resolution used for export (in px).</p>
+                        <div class="field">
+                            <label for="renderHeight">Height</label>
+                            <input type="number" id="renderHeight" value="1080" min="600" max="4320" step="10">
+                        </div>
                     </div>
+                    <p class="hint">Output resolution used for export (px).</p>
                 </section>
 
-                <!-- OPTIONS -->
-                <section class="control-section">
-                    <button class="section-title collapsible-header collapsed" data-section="options" type="button">
-                        <span>Options</span>
-                        <svg class="collapse-icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-                            <path d="M2 4 L6 8 L10 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                    </button>
-
-                    <div class="collapsible-content collapsed" data-content="options">
-                        <div class="toggle-grid">
-                            <label class="checkbox-wrapper">
-                                <input type="checkbox" id="enableHover" checked>
-                                <span>Tooltips</span>
-                            </label>
-                        </div>
+                <section class="group">
+                    <h2 class="group__title">Options</h2>
+                    <div class="toggles">
+                        <label class="toggle">
+                            <input type="checkbox" id="enableHover" checked>
+                            <span class="toggle__box"></span>
+                            <span class="toggle__label">Tooltips</span>
+                        </label>
                     </div>
                 </section>
             </div>
 
-            <div class="sidebar-footer">
-                <button id="downloadSvg" class="btn-primary">Download SVG</button>
-                <button id="downloadPng" class="btn-secondary">Download PNG</button>
-            </div>
+            <footer class="sidebar__footer">
+                <button id="downloadSvg" class="btn btn--primary">Download SVG</button>
+                <button id="downloadPng" class="btn btn--ghost">Download PNG</button>
+            </footer>
         </aside>
 
-        <main class="main-content">
-            <div class="progress-container">
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progressBarFill"></div>
-                </div>
-                <div id="progressIndicator" class="status-pill" style="display: none;">
-                    Initializing...
-                </div>
-            </div>
+        <main class="stage">
+            <div class="stage__progress"><div class="stage__bar" id="progressBarFill"></div></div>
+            <div id="progressIndicator" class="pill" style="display: none;">Initializing…</div>
 
             <div class="map-wrapper">
                 <svg id="map"></svg>
             </div>
 
-            <div class="overlay-container overlay-top-right">
-                <div id="performanceInfo" class="info-card" style="display: none;"></div>
-            </div>
-
-            <div class="overlay-container overlay-bottom-right">
-                <div id="debug" class="info-card" style="display: none;"></div>
-            </div>
+            <div id="performanceInfo" class="card card--top-right" style="display: none;"></div>
         </main>
     </div>
 
@@ -242,24 +181,5 @@
 
     <script src="worker-pool.js"></script>
     <script src="index.js"></script>
-    
-    <script>
-        // Collapsible sections functionality
-        document.addEventListener('DOMContentLoaded', function() {
-            const headers = document.querySelectorAll('.collapsible-header');
-            
-            headers.forEach(header => {
-                header.addEventListener('click', function() {
-                    const sectionName = this.getAttribute('data-section');
-                    const content = document.querySelector(`.collapsible-content[data-content="${sectionName}"]`);
-                    
-                    if (content) {
-                        this.classList.toggle('collapsed');
-                        content.classList.toggle('collapsed');
-                    }
-                });
-            });
-        });
-    </script>
 </body>
 </html>
