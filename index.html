@@ -87,6 +87,8 @@
                         <label for="regionType">Crop to</label>
                         <select id="regionType">
                             <option value="world">Whole world</option>
+                            <option value="continent">Continent</option>
+                            <option value="bloc">Political bloc</option>
                             <option value="hemisphere">Hemisphere</option>
                             <option value="country">Country</option>
                             <option value="countryNeighbours">Country + neighbours</option>
@@ -229,6 +231,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/d3-geo-projection@4"></script>
 
+    <script src="regions.js"></script>
     <script src="worker-pool.js"></script>
     <script src="index.js"></script>
 </body>
