@@ -124,7 +124,7 @@ function processChunk(params, chunkId) {
             if (!isValidCoordinate(coords)) continue;
 
             const col = Math.min(rasterWidth - 1, Math.max(0, Math.round(x - startX)));
-            const country = lookupCountry(data, col, py, rasterWidth);
+            const country = lookupCountry(data, col, py, rasterWidth, height);
             // Land and ocean dots are independently toggleable. When cropping,
             // anything not in the selection is always dropped (a crop never shows
             // ocean dots over unselected land).
@@ -159,15 +159,57 @@ function calculateDots({ width, height, projectionName, spacing, showOceanDots }
 
 // --- Helper Functions ---
 
-// Decode the country sitting under raster pixel (col, y). Only fully-covered,
-// opaque interior pixels are accepted, so antialiased border/coast pixels fall
-// through to ocean rather than being mis-assigned to the wrong country.
-function lookupCountry(data, col, y, rasterWidth) {
+// Decode the country sitting under raster pixel (col, y).
+//
+// alpha === 0    -> genuine open ocean.
+// alpha === 255  -> solid country interior (decode directly).
+// 0 < alpha < 255 -> the dot sits on a coastline or an inter-country seam. The
+//   pixel colour is unreliable there (it may be a blend of two countries), so
+//   instead of dropping it to "ocean" we vote among the nearby SOLID pixels and
+//   assign the dominant adjacent country. This keeps border dots attached to a
+//   country while still leaving genuine open-ocean dots as ocean.
+function lookupCountry(data, col, y, rasterWidth, rasterHeight) {
     const i = (y * rasterWidth + col) * 4;
-    if (data[i + 3] < 255) return null; // antialiased edge or ocean
-    const idx = data[i] + (data[i + 1] << 8);
-    if (idx <= 0 || idx > world.features.length) return null;
-    return world.features[idx - 1];
+    const alpha = data[i + 3];
+    if (alpha === 0) return null; // open ocean
+
+    if (alpha === 255) {
+        const idx = data[i] + (data[i + 1] << 8);
+        if (idx > 0 && idx <= world.features.length) return world.features[idx - 1];
+    }
+
+    return dominantNeighbourCountry(data, col, y, rasterWidth, rasterHeight);
+}
+
+// Most common country among solid (opaque) pixels in a small window around
+// (col, y). Searches radius 1 first, then radius 2; returns null if no solid
+// land is nearby (a true ocean sliver).
+function dominantNeighbourCountry(data, col, y, rasterWidth, rasterHeight) {
+    const counts = new Map();
+    let bestIdx = 0;
+    let bestCount = 0;
+
+    for (let r = 1; r <= 2; r++) {
+        for (let dy = -r; dy <= r; dy++) {
+            const yy = y + dy;
+            if (yy < 0 || yy >= rasterHeight) continue;
+            for (let dx = -r; dx <= r; dx++) {
+                if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue; // ring only
+                const xx = col + dx;
+                if (xx < 0 || xx >= rasterWidth) continue;
+                const j = (yy * rasterWidth + xx) * 4;
+                if (data[j + 3] < 250) continue; // only solid interior pixels
+                const idx = data[j] + (data[j + 1] << 8);
+                if (idx < 1 || idx > world.features.length) continue;
+                const c = (counts.get(idx) || 0) + 1;
+                counts.set(idx, c);
+                if (c > bestCount) { bestCount = c; bestIdx = idx; }
+            }
+        }
+        if (bestIdx > 0) break; // found at this radius
+    }
+
+    return bestIdx > 0 ? world.features[bestIdx - 1] : null;
 }
 
 function isValidCoordinate(coordinates) {
