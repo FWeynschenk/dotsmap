@@ -90,7 +90,7 @@ function rasterizeCountries(projection, offsetX, rasterWidth, rasterHeight, draw
 
 // Process a chunk of the grid spanning x in [startX, endX).
 function processChunk(params, chunkId) {
-    const { width, height, projectionName, spacing, showOceanDots, startX, endX, selectedIndices, packing } = params;
+    const { width, height, projectionName, spacing, showLandDots, showOceanDots, startX, endX, selectedIndices, packing } = params;
 
     const fitGeometry = buildFitGeometry(selectedIndices);
     const projection = setupProjection(projectionName, width, height, fitGeometry);
@@ -125,10 +125,14 @@ function processChunk(params, chunkId) {
 
             const col = Math.min(rasterWidth - 1, Math.max(0, Math.round(x - startX)));
             const country = lookupCountry(data, col, py, rasterWidth);
-            // When cropping, anything not in the selection is dropped (so a crop
-            // never shows ocean dots over unselected land); otherwise ocean dots
-            // depend on the toggle.
-            if (!country && (filterActive || !showOceanDots)) continue;
+            // Land and ocean dots are independently toggleable. When cropping,
+            // anything not in the selection is always dropped (a crop never shows
+            // ocean dots over unselected land).
+            if (country) {
+                if (!showLandDots) continue;
+            } else if (filterActive || !showOceanDots) {
+                continue;
+            }
 
             results.push({
                 x,

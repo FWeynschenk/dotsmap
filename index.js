@@ -59,8 +59,8 @@ function setStatus(text, isError = false) {
 const dotCache = new Map();
 const DOT_CACHE_LIMIT = 10;
 
-function dotCacheKey({ projectionName, width, height, spacing, packing, showOceanDots, region }) {
-    return `${projectionName}-${width}-${height}-${spacing}-${packing || "square"}-${showOceanDots}-${region || "world"}`;
+function dotCacheKey({ projectionName, width, height, spacing, packing, showLandDots, showOceanDots, region }) {
+    return `${projectionName}-${width}-${height}-${spacing}-${packing || "square"}-${showLandDots}-${showOceanDots}-${region || "world"}`;
 }
 
 
@@ -528,13 +528,14 @@ function updateMap() {
             .attr("stroke-width", 1);
     }
 
-    if (showDots) {
+    if (showDots || showOceanDots) {
         calculateDotsOptimized({
             width,
             height,
             projectionName,
             spacing,
             packing,
+            showLandDots: showDots,
             showOceanDots,
             dotSize,
             enableHover,
