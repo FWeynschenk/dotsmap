@@ -518,6 +518,9 @@ function updateMap() {
     // Generate colors
     countryColors = generateCountryColors(world.features);
 
+    const showBg = document.getElementById("showBg").checked;
+    const bgColor = document.getElementById("bgColor").value;
+
     const svg = d3.select("#map")
         .attr("width", displayDims.width)
         .attr("height", displayDims.height)
@@ -525,6 +528,13 @@ function updateMap() {
         .attr("preserveAspectRatio", "xMidYMid meet");
 
     svg.selectAll("*").remove();
+
+    if (showBg) {
+        svg.append("rect")
+            .attr("width", width)
+            .attr("height", height)
+            .attr("fill", bgColor);
+    }
 
     currentProjection = setupProjection(projectionName, width, height, fitGeometry);
     path = d3.geoPath(currentProjection);
@@ -744,7 +754,7 @@ function setupAutoUpdate() {
     const autoUpdateIds = [
         "projection", "renderWidth", "renderHeight", "spacing", "packing", "dotSize",
         "landDotShape", "oceanDotShape", "oceanDotSize", "oceanDotColor",
-        "baseColor", "rainbowSeed", "showDots", "showOceanDots", "showCountries",
+        "showBg", "bgColor", "baseColor", "rainbowSeed", "showDots", "showOceanDots", "showCountries",
         "showOcean", "showOutline", "showGraticules", "enableHover"
     ];
     autoUpdateIds.forEach(id => {
@@ -755,6 +765,14 @@ function setupAutoUpdate() {
     const oceanDotsToggle = document.getElementById("showOceanDots");
     if (oceanDotsToggle) {
         oceanDotsToggle.addEventListener("change", updateDotControlsVisibility);
+    }
+
+    const showBgToggle = document.getElementById("showBg");
+    if (showBgToggle) {
+        showBgToggle.addEventListener("change", function() {
+            const wrap = document.getElementById("bgColorWrap");
+            if (wrap) wrap.style.display = this.checked ? "flex" : "none";
+        });
     }
 
     const colorScheme = document.getElementById("colorScheme");
@@ -942,6 +960,10 @@ async function downloadAsPNG() {
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
+        if (document.getElementById("showBg").checked) {
+            ctx.fillStyle = document.getElementById("bgColor").value;
+            ctx.fillRect(0, 0, width, height);
+        }
         ctx.drawImage(img, 0, 0, width, height);
         
         // Convert to PNG and download

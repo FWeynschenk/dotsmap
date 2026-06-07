@@ -102,6 +102,17 @@
 
                 <section class="group">
                     <h2 class="group__title">Colors</h2>
+                    <div class="toggles">
+                        <label class="toggle">
+                            <input type="checkbox" id="showBg">
+                            <span class="toggle__box"></span>
+                            <span class="toggle__label">Background color</span>
+                        </label>
+                    </div>
+                    <div class="field" id="bgColorWrap" style="display: none;">
+                        <label for="bgColor">Color</label>
+                        <input type="color" id="bgColor" value="#ffffff">
+                    </div>
                     <div class="field">
                         <label for="colorScheme">Scheme</label>
                         <select id="colorScheme">
